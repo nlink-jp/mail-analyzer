@@ -1,0 +1,19 @@
+Return-Path: <bounce@malicious-domain.com>
+From: IT Support <admin@yourcompany.com>
+Reply-To: hacker@evil.com
+To: victim@yourcompany.com
+Subject: Urgent: Your Account Will Be Suspended
+Date: Mon, 31 Mar 2026 10:00:00 +0900
+Message-ID: <phish-001@malicious-domain.com>
+Authentication-Results: mx.google.com; spf=fail; dkim=fail; dmarc=fail
+Content-Type: text/html; charset=utf-8
+
+<html>
+<body>
+<p>Dear User,</p>
+<p>Your account will be <b>SUSPENDED</b> within 24 hours unless you verify your credentials immediately.</p>
+<p><a href="https://bit.ly/fake-login">Click here to verify your account NOW</a></p>
+<p>This is an automated message. Do not reply.</p>
+<p>IT Support Team</p>
+</body>
+</html>

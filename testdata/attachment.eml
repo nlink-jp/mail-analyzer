@@ -1,0 +1,20 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: Invoice Attached
+Date: Mon, 31 Mar 2026 10:00:00 +0900
+Message-ID: <attach-001@example.com>
+Content-Type: multipart/mixed; boundary=boundary123
+
+--boundary123
+Content-Type: text/plain; charset=utf-8
+
+Please find the invoice attached.
+
+--boundary123
+Content-Type: application/pdf; name="invoice.pdf"
+Content-Disposition: attachment; filename="invoice.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5k
+b2JqCg==
+--boundary123--

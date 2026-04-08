@@ -1,0 +1,13 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: Meeting Tomorrow
+Date: Mon, 31 Mar 2026 10:00:00 +0900
+Message-ID: <test-001@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Hi,
+
+Let's meet tomorrow at 10am to discuss the project timeline.
+
+Best regards,
+Alice
