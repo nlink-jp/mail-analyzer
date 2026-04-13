@@ -45,12 +45,26 @@ mail-analyzer email.eml | jq '.indicators.urls[] | select(.suspicious)'
 
 ## 設定
 
+以下の優先順位で設定を読み込みます:
+
+1. **環境変数** (`MAIL_ANALYZER_*` または `GOOGLE_CLOUD_*`)
+2. **TOML設定ファイル** (`~/.config/mail-analyzer/config.toml`)
+3. **デフォルト値**
+
+```bash
+# 設定ファイルのセットアップ（任意）
+mkdir -p ~/.config/mail-analyzer
+cp config.example.toml ~/.config/mail-analyzer/config.toml
+# プロジェクトIDを編集
+```
+
 | 環境変数 | デフォルト | 説明 |
 |----------|-----------|------|
 | `MAIL_ANALYZER_PROJECT` | (必須) | GCPプロジェクトID |
 | `MAIL_ANALYZER_LOCATION` | `us-central1` | Vertex AIリージョン |
 | `MAIL_ANALYZER_MODEL` | `gemini-2.5-flash` | Geminiモデル名 |
 | `MAIL_ANALYZER_LANG` | (自動) | 出力言語の強制指定 |
+| `--config <path>` | | 設定ファイルパスの上書き |
 
 ## ビルド
 

@@ -34,8 +34,8 @@ type Judgment struct {
 // Analyze sends the email data to Gemini and returns a structured judgment.
 func Analyze(ctx context.Context, cfg *config.Config, systemPrompt, userPrompt string) (*Judgment, error) {
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		Project:  cfg.Project,
-		Location: cfg.Location,
+		Project:  cfg.GCP.Project,
+		Location: cfg.GCP.Location,
 		Backend:  genai.BackendVertexAI,
 	})
 	if err != nil {
@@ -51,7 +51,7 @@ func Analyze(ctx context.Context, cfg *config.Config, systemPrompt, userPrompt s
 
 	var lastErr error
 	for attempt := range maxRetries + 1 {
-		resp, err := client.Models.GenerateContent(ctx, cfg.Model, genai.Text(userPrompt), gcfg)
+		resp, err := client.Models.GenerateContent(ctx, cfg.Model.Name, genai.Text(userPrompt), gcfg)
 		if err == nil && resp != nil {
 			text := extractText(resp)
 			if text == "" {

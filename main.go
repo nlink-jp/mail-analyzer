@@ -24,16 +24,26 @@ func main() {
 
 	offline := false
 	var filePath string
+	var configPath string
 
-	for _, arg := range os.Args[1:] {
-		switch arg {
+	args := os.Args[1:]
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
 		case "--offline":
 			offline = true
 		case "--version":
 			fmt.Println(version)
 			os.Exit(0)
+		case "--config":
+			if i+1 < len(args) {
+				i++
+				configPath = args[i]
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: --config requires a path argument\n")
+				os.Exit(1)
+			}
 		default:
-			filePath = arg
+			filePath = args[i]
 		}
 	}
 
@@ -53,7 +63,7 @@ func main() {
 	if offline {
 		result = analyzer.AnalyzeOffline(email)
 	} else {
-		cfg, err := config.Load()
+		cfg, err := config.Load(configPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)

@@ -46,12 +46,26 @@ mail-analyzer email.eml | jq '.indicators.urls[] | select(.suspicious)'
 
 ## Configuration
 
+Configuration is loaded with the following priority:
+
+1. **Environment variables** (`MAIL_ANALYZER_*` or `GOOGLE_CLOUD_*`)
+2. **TOML config file** (`~/.config/mail-analyzer/config.toml`)
+3. **Defaults**
+
+```bash
+# Setup config file (optional)
+mkdir -p ~/.config/mail-analyzer
+cp config.example.toml ~/.config/mail-analyzer/config.toml
+# Edit project ID
+```
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MAIL_ANALYZER_PROJECT` | (required) | GCP project ID for Vertex AI |
 | `MAIL_ANALYZER_LOCATION` | `us-central1` | Vertex AI location |
 | `MAIL_ANALYZER_MODEL` | `gemini-2.5-flash` | Gemini model name |
 | `MAIL_ANALYZER_LANG` | (auto) | Force output language |
+| `--config <path>` | | Override config file path |
 
 ## Output Schema
 
