@@ -52,13 +52,15 @@ mail-analyzer/
 | Variable | Description |
 |----------|-------------|
 | `MAIL_ANALYZER_PROJECT` | GCP project ID (required for LLM mode) |
-| `MAIL_ANALYZER_LOCATION` | Vertex AI location (default: us-central1) |
-| `MAIL_ANALYZER_MODEL` | Gemini model (default: gemini-2.5-flash) |
+| `MAIL_ANALYZER_LOCATION` | Vertex AI location (default: global) |
+| `MAIL_ANALYZER_MODEL` | Gemini model (default: gemini-3.7-flash) |
 | `MAIL_ANALYZER_LANG` | Force output language (optional) |
 
 ## Gotchas
 
 - Uses google.golang.org/genai SDK (NOT the deprecated vertexai SDK)
+- Gemini 3 models are global-endpoint only — a regional location 404s them;
+  the client appends a hint to that NOT_FOUND error
 - SPF/DMARC fail alone does NOT trigger suspicious — needs other signals
 - Subdomain matching: bounce.mag.subaru.jp is considered related to mag.subaru.jp
 - testdata/samples/ is gitignored (real email samples, not committed)

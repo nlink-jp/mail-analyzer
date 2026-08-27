@@ -41,10 +41,13 @@ func (c *Config) ModelName() string { return c.Model.Name }
 func Load(path string) (*Config, error) {
 	cfg := &Config{
 		GCP: GCPConfig{
-			Location: "us-central1",
+			// "global": Vertex AI serves the Gemini 3 family only from the
+			// global endpoint — regional endpoints 404 them (measured
+			// 2026-08). Gemini 2.5 users set a regional location.
+			Location: "global",
 		},
 		Model: ModelConfig{
-			Name: "gemini-2.5-flash",
+			Name: "gemini-3.7-flash",
 		},
 	}
 

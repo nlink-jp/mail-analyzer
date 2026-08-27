@@ -6,7 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/richardlehane/mscfb v1.0.6
 	golang.org/x/text v0.35.0
-	google.golang.org/genai v1.52.0
+	google.golang.org/genai v1.70.0
 )
 
 require (

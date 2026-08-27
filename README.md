@@ -62,8 +62,8 @@ cp config.example.toml ~/.config/mail-analyzer/config.toml
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MAIL_ANALYZER_PROJECT` | (required) | GCP project ID for Vertex AI |
-| `MAIL_ANALYZER_LOCATION` | `us-central1` | Vertex AI location |
-| `MAIL_ANALYZER_MODEL` | `gemini-2.5-flash` | Gemini model name |
+| `MAIL_ANALYZER_LOCATION` | `global` | Vertex AI location (Gemini 3 models require `global`) |
+| `MAIL_ANALYZER_MODEL` | `gemini-3.7-flash` | Gemini model name |
 | `MAIL_ANALYZER_LANG` | (auto) | Force output language |
 | `--config <path>` | | Override config file path |
 

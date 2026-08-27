@@ -1,9 +1,11 @@
 [gcp]
 project  = "your-project-id"
-location = "us-central1"
+# Gemini 3 models are served only from the global endpoint.
+# Set a region (e.g. "us-central1") only when using a Gemini 2.5 model.
+location = "global"
 
 [model]
-name = "gemini-2.5-flash"
+name = "gemini-3.7-flash"
 
 # Optional: force output language (e.g. "ja", "en")
 # lang = ""

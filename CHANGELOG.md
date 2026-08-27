@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-08-28
+
+### Changed
+
+- **Default model is now `gemini-3.7-flash`** (was `gemini-2.5-flash`), ahead
+  of the Vertex AI Gemini 2.5 retirement. Gemini 2.5 models still work when
+  set explicitly via config or `MAIL_ANALYZER_MODEL`.
+- **Default location is now `global`** (was `us-central1`): Vertex AI serves
+  the Gemini 3 family only from the global endpoint — regional endpoints
+  return 404 for them. Gemini 2.5 users should set a regional location
+  explicitly.
+- Updated google.golang.org/genai SDK.
+
+### Added
+
+- Actionable error hint: requesting a Gemini 3 model from a regional endpoint
+  used to fail with a bare `404 NOT_FOUND`; the error now explains that
+  Gemini 3 models require `location = "global"`.
+
 ## [0.2.0] - 2026-07-12
 
 ### Removed

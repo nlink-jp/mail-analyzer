@@ -77,7 +77,7 @@ func Analyze(ctx context.Context, cfg *config.Config, systemPrompt, userPrompt s
 			}
 
 			if !isRetryable || attempt == maxRetries {
-				return nil, fmt.Errorf("LLM analysis failed: %w", err)
+				return nil, fmt.Errorf("LLM analysis failed: %w", hintGemini3Location(err, cfg.Model.Name, cfg.GCP.Location))
 			}
 
 			delay := min(baseDelay*float64(int(1)<<attempt), maxDelay)
@@ -91,6 +91,24 @@ func Analyze(ctx context.Context, cfg *config.Config, systemPrompt, userPrompt s
 	}
 
 	return nil, fmt.Errorf("LLM analysis failed after %d retries: %w", maxRetries, lastErr)
+}
+
+// hintGemini3Location appends an actionable hint to a NOT_FOUND error when a
+// Gemini 3 model is requested from a regional endpoint: Vertex AI serves the
+// Gemini 3 family only from the global endpoint (regional endpoints return
+// 404 NOT_FOUND, which says nothing about the location being the cause).
+func hintGemini3Location(err error, model, location string) error {
+	if err == nil || location == "global" {
+		return err
+	}
+	if !strings.HasPrefix(strings.TrimPrefix(model, "google/"), "gemini-3") {
+		return err
+	}
+	errStr := strings.ToLower(err.Error())
+	if !strings.Contains(errStr, "not_found") && !strings.Contains(errStr, "404") {
+		return err
+	}
+	return fmt.Errorf("%w (hint: %s is a Gemini 3 model, served only from the global endpoint — set location = \"global\")", err, model)
 }
 
 func extractText(resp *genai.GenerateContentResponse) string {
