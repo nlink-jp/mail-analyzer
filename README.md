@@ -107,7 +107,7 @@ make clean      # Remove dist/
 
 ## Documentation
 
-- [Architecture](docs/architecture.md) — Design decisions, analysis methodology, rationale
+- [Architecture](docs/en/architecture.md) — Design decisions, analysis methodology, rationale
 - [README.md](README.md) (English)
 - [README.ja.md](README.ja.md) (Japanese)
 - [CHANGELOG.md](CHANGELOG.md)

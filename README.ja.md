@@ -77,7 +77,7 @@ make clean      # dist/ 削除
 
 ## ドキュメント
 
-- [Architecture](docs/architecture.md)（設計判断、分析手法、根拠）
+- [Architecture](docs/en/architecture.md)（設計判断、分析手法、根拠）
 - [README.md](README.md)（English）
 - [README.ja.md](README.ja.md)（日本語）
 - [CHANGELOG.md](CHANGELOG.md)
