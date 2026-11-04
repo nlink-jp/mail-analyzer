@@ -51,6 +51,8 @@ mail-analyzer email.eml | jq '.indicators.urls[] | select(.suspicious)'
 2. **TOML設定ファイル** (`~/.config/mail-analyzer/config.toml`)
 3. **デフォルト値**
 
+設定ファイルにある知らないキー（打ち間違いなど）は黙って無視せず、そのキー名を示してエラーにします。
+
 ```bash
 # 設定ファイルのセットアップ（任意）
 mkdir -p ~/.config/mail-analyzer

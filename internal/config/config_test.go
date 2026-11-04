@@ -103,6 +103,22 @@ location = "us-central1"
 	}
 }
 
+// A key the config does not know — a typo, or a setting from another tool —
+// is refused with its name rather than silently ignored, so a setting that
+// seems to do nothing cannot be one that was never read.
+func TestLoadRefusesUnknownKeys(t *testing.T) {
+	clearEnv(t)
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := "[gcp]\nproject = \"p\"\nlocaton = \"global\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(path)
+	if err == nil || !strings.Contains(err.Error(), "gcp.locaton") {
+		t.Fatalf("Load = %v, want an error naming gcp.locaton", err)
+	}
+}
+
 func TestMissingProjectFails(t *testing.T) {
 	clearEnv(t)
 

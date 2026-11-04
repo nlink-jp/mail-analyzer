@@ -52,6 +52,9 @@ Configuration is loaded with the following priority:
 2. **TOML config file** (`~/.config/mail-analyzer/config.toml`)
 3. **Defaults**
 
+A key the config file does not know — a typo, say — is an error that names
+it, not a setting silently ignored.
+
 ```bash
 # Setup config file (optional)
 mkdir -p ~/.config/mail-analyzer
