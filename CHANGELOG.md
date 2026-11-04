@@ -5,10 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.0] - 2026-11-04
+
+### Changed
+
+- **An unknown key in `config.toml` is now an error** that names the key,
+  where it used to be skipped without a word. A typo such as `locaton`
+  no longer leaves a setting that seems to do nothing. Remove or correct
+  the key the message names.
+- **The config file is read by nlink-jp/toml** (v0.1.1) instead of the
+  third-party `BurntSushi/toml`, so the tool carries no TOML code from
+  outside the organization.
 
 ### Fixed
 
+- **`config.example.toml` puts `lang` where it is read.** It sat under
+  `[model]`, so uncommenting it set `model.lang`, which the old decoder
+  ignored and strict decoding refuses. It is a top-level key and now comes
+  before `[gcp]`.
 - **`make verify-release` now fails closed.** Its last block chained unzip, the
   packaged binary's `--version` and `spctl` with `&&` and ended the whole chain
   in `|| true`, so a zip that did not unpack or a binary that did not run exited
