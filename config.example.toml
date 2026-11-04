@@ -1,3 +1,7 @@
+# Optional: force output language (e.g. "ja", "en"). A top-level key: it
+# must come before the first [table], or TOML reads it as part of that table.
+# lang = ""
+
 [gcp]
 project  = "your-project-id"
 # Gemini 3 models are served only from the global endpoint.
@@ -7,5 +11,3 @@ location = "global"
 [model]
 name = "gemini-3.7-flash"
 
-# Optional: force output language (e.g. "ja", "en")
-# lang = ""
