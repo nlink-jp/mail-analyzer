@@ -24,9 +24,11 @@ func TestBuildUserPromptShowsEveryFromField(t *testing.T) {
 
 func TestBuildUserPromptAuthPerHeaderAndWarnings(t *testing.T) {
 	email := &parser.Email{
-		From:     "a@example.com",
-		Warnings: []parser.Warning{{Code: "duplicate_field"}, {Code: "duplicate_field"}, {Code: "malformed_header_line"}},
-		Nested:   []*parser.Email{{Part: "2", Warnings: []parser.Warning{{Code: "invalid_base64", Part: "1"}}}},
+		From: "a@example.com",
+		// A hand-built Email gives its own Warnings; a parsed one gives those of
+		// its attached messages too, with absolute parts ("2>1").
+		Warnings: []parser.Warning{{Code: "duplicate_field"}, {Code: "duplicate_field"}, {Code: "malformed_header_line"}, {Code: "invalid_base64", Part: "2>1"}},
+		Nested:   []*parser.Email{{Part: "2"}},
 	}
 	ind := &indicator.Indicators{Authentication: indicator.AuthResult{
 		SPF: "fail", DKIM: "pass", DMARC: "pass", Conflicting: true,

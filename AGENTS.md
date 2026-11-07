@@ -75,7 +75,12 @@ mail-analyzer/
 - An attachment with no extracted bytes has Hash "" (never the empty-data hash).
 - Kept for compatibility with the old parser (and with mail-analyzer-local):
   an unnamed inline text/* part other than plain/html (text/calendar) is a
-  body so its links are checked; an unnamed attachment is "attachment";
-  Received folding is joined with one space ("by " matching); bodies are LF.
+  body so its links are checked (converted with Attachment.Text); an unnamed
+  attachment is "attachment"; Received is Field.Collapsed ("by " matching);
+  bodies are LF.
+- Since mailparse v0.2.0 the helpers it took over are not re-implemented here:
+  Mailbox.String, Message.AllWarnings, Body.Origin ("rtf" marks the RTF copy),
+  DefaultMaxSize (64 MiB). Only an address field whose mailbox has no address
+  (an Exchange DN) falls back to the field's Raw, as before.
 - Codesigning needs Apple's timestamp server; in a sandbox without it use
   `make build CODESIGN_IDENTITY=none` for local runs.

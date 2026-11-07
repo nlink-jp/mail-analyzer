@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"strings"
 	"testing"
+
+	"github.com/nlink-jp/mailparse"
 )
 
 // The fixtures pin defects of the in-house parser (v0.4.0 and earlier) that
@@ -226,8 +228,12 @@ func TestMailboxString(t *testing.T) {
 		{Mailbox{Name: "Alice", Address: "a@example.com"}, "Alice <a@example.com>"},
 		{Mailbox{Name: "Smith, J.", Address: "j@example.com"}, `"Smith, J." <j@example.com>`},
 		{Mailbox{Name: `a "b"`, Address: "x@example.com"}, `"a \"b\"" <x@example.com>`},
-		{Mailbox{Name: "J. Smith", Address: "j@example.com"}, "J. Smith <j@example.com>"},
-		{Mailbox{Name: "Taro"}, "Taro"},
+		// mailparse's Mailbox.String (v0.2.0): RFC 5322, so a name with a
+		// special such as '.' is quoted, and a name-only mailbox is quoted text.
+		{Mailbox{Name: "J. Smith", Address: "j@example.com"}, `"J. Smith" <j@example.com>`},
+		{Mailbox{Name: "山田 太郎", Address: "t@example.jp"}, "山田 太郎 <t@example.jp>"},
+		{Mailbox{Name: "Bank <security@bank.example>", Address: "x@phish.example"}, `"Bank <security@bank.example>" <x@phish.example>`},
+		{Mailbox{Name: "Taro"}, `"Taro"`},
 	}
 	for _, tt := range tests {
 		if got := tt.mb.String(); got != tt.want {
@@ -236,29 +242,70 @@ func TestMailboxString(t *testing.T) {
 	}
 }
 
+// nestedWarningEML holds a damaged Base64 part inside an attached message:
+// its warning belongs to part 1 of the message attached as part 2.
+const nestedWarningEML = "From: a@example.net\r\n" +
+	"To: b@example.org\r\n" +
+	"Subject: fwd\r\n" +
+	"MIME-Version: 1.0\r\n" +
+	"Content-Type: multipart/mixed; boundary=\"o\"\r\n" +
+	"\r\n" +
+	"--o\r\n" +
+	"Content-Type: text/plain\r\n" +
+	"\r\n" +
+	"see attached\r\n" +
+	"--o\r\n" +
+	"Content-Type: message/rfc822\r\n" +
+	"\r\n" +
+	"From: c@example.com\r\n" +
+	"Subject: inner\r\n" +
+	"MIME-Version: 1.0\r\n" +
+	"Content-Type: multipart/mixed; boundary=\"i\"\r\n" +
+	"\r\n" +
+	"--i\r\n" +
+	"Content-Type: application/octet-stream; name=\"x.bin\"\r\n" +
+	"Content-Transfer-Encoding: base64\r\n" +
+	"\r\n" +
+	"QUJD!!!\r\n" +
+	"--i--\r\n" +
+	"--o--\r\n"
+
 func TestAllWarningsPrefixesNestedParts(t *testing.T) {
-	e := &Email{
-		Warnings: []Warning{{Code: "a", Part: ""}},
-		Nested: []*Email{{
-			Part:     "2",
-			Warnings: []Warning{{Code: "b", Part: "1"}},
-			Nested:   []*Email{{Part: "3", Warnings: []Warning{{Code: "c", Part: ""}}}},
-		}},
+	e, err := ParseBytes([]byte(nestedWarningEML), "fwd.eml")
+	if err != nil {
+		t.Fatal(err)
 	}
-	got := e.AllWarnings()
-	want := []Warning{{Code: "a"}, {Code: "b", Part: "2>1"}, {Code: "c", Part: "2>3"}}
-	if len(got) != len(want) {
-		t.Fatalf("AllWarnings = %+v", got)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("AllWarnings[%d] = %+v, want %+v", i, got[i], want[i])
+	var got []Warning
+	for _, w := range e.AllWarnings() {
+		if w.Code == "invalid_base64" {
+			got = append(got, w)
 		}
+	}
+	if len(got) != 1 || got[0].Part != "2>1" {
+		t.Fatalf("invalid_base64 warnings = %+v, want one at part 2>1", e.AllWarnings())
+	}
+	// The nested Email gives the same warning relative to itself.
+	if len(e.Nested) != 1 || !hasWarningPart(e.Nested[0], "invalid_base64", "1") {
+		t.Errorf("nested warnings = %+v", e.Nested)
+	}
+	// An Email built by hand gives its own warnings.
+	hand := &Email{Warnings: []Warning{{Code: "a"}}}
+	if ws := hand.AllWarnings(); len(ws) != 1 || ws[0].Code != "a" {
+		t.Errorf("hand-built AllWarnings = %+v", ws)
 	}
 }
 
+func hasWarningPart(e *Email, code, part string) bool {
+	for _, w := range e.AllWarnings() {
+		if w.Code == code && w.Part == part {
+			return true
+		}
+	}
+	return false
+}
+
 func TestParseBytesRejectsOversizedInput(t *testing.T) {
-	big := make([]byte, maxInputSize+1)
+	big := make([]byte, mailparse.DefaultMaxSize+1)
 	if _, err := ParseBytes(big, "big.eml"); err == nil {
 		t.Error("expected an error for input over the size limit")
 	}
@@ -319,14 +366,67 @@ func TestCompatWithInHouseParser(t *testing.T) {
 
 func TestRTFCopyLeftOutOfLLMBodyWhenAnotherExists(t *testing.T) {
 	e := &Email{Body: []BodyPart{
-		{Type: "text/plain", Content: "body", Part: "msg/body"},
-		{Type: "text/plain", Content: "body again", Part: "msg/rtf"},
-		{Type: "text/html", Content: "<p>only rtf</p>", Part: "msg/rtf"},
+		{Type: "text/plain", Content: "body", Part: "msg/body", Origin: "mapi"},
+		{Type: "text/plain", Content: "body again", Part: "msg/rtf", Origin: "rtf"},
+		{Type: "text/html", Content: "<p>only rtf</p>", Part: "msg/rtf", Origin: "rtf"},
 	}}
 	if got := e.PlainTextBody(); got != "body" {
 		t.Errorf("PlainTextBody = %q, want the RTF copy left out", got)
 	}
 	if got := e.HTMLBody(); got != "<p>only rtf</p>" {
 		t.Errorf("HTMLBody = %q, want the RTF body when it is the only one", got)
+	}
+}
+
+// An unnamed inline text/* part other than plain or HTML stays a body and is
+// converted to UTF-8 with mailparse's Attachment.Text (v0.2.0), as bodies are.
+func TestInlineTextPartIsCharsetConverted(t *testing.T) {
+	eml := "From: a@example.net\r\n" +
+		"To: b@example.org\r\n" +
+		"Subject: invite\r\n" +
+		"MIME-Version: 1.0\r\n" +
+		"Content-Type: multipart/mixed; boundary=\"c\"\r\n" +
+		"\r\n" +
+		"--c\r\n" +
+		"Content-Type: text/plain\r\n" +
+		"\r\n" +
+		"see the invite\r\n" +
+		"--c\r\n" +
+		"Content-Type: text/calendar; method=REQUEST; charset=ISO-2022-JP\r\n" +
+		"\r\n" +
+		"SUMMARY:\x1b$B2q5D\x1b(B\r\nURL:https://meet.evil.example/join\r\n" +
+		"--c--\r\n"
+	e, err := ParseBytes([]byte(eml), "invite.eml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range e.Body {
+		if b.Type == "text/calendar" {
+			if !strings.Contains(b.Content, "SUMMARY:会議") || !strings.Contains(b.Content, "https://meet.evil.example/join") {
+				t.Errorf("text/calendar body = %q", b.Content)
+			}
+			return
+		}
+	}
+	t.Errorf("no text/calendar body in %+v", e.Body)
+}
+
+// A UTF-8 byte order mark before an .eml's header no longer swallows the first
+// field (mailparse v0.2.0); it is reported as leading_bom.
+func TestLeadingBOMDoesNotHideFirstField(t *testing.T) {
+	eml := "\xef\xbb\xbfFrom: Alice <a@example.net>\r\n" +
+		"To: b@example.org\r\n" +
+		"Subject: hi\r\n" +
+		"\r\n" +
+		"body\r\n"
+	e, err := ParseBytes([]byte(eml), "bom.eml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.From != "Alice <a@example.net>" {
+		t.Errorf("From = %q", e.From)
+	}
+	if !hasWarning(e, "leading_bom") {
+		t.Errorf("warnings = %+v, want leading_bom", e.AllWarnings())
 	}
 }

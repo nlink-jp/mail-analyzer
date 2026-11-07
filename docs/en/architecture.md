@@ -121,6 +121,14 @@ What the rules decide stays here: the meaning of `Authentication-Results`, URL e
 **Why not keep the RFC 2047 repair of v2?** mailparse took it over (with a `repaired_encoded_word` warning),
 together with `<meta charset>` for HTML that declares its charset only there.
 
+**What v0.5.0 still did around mailparse, and v0.6.0 does not.** v0.5.0 rendered mailboxes with its own quoting
+rule, prefixed nested warnings itself, found the RTF copy of a `.msg` body by its part name, collapsed
+`Received` whitespace and raised the size limit. mailparse v0.2.0 provides each (`Mailbox.String`,
+`Message.AllWarnings`, `Body.Origin`, `Field.Collapsed`, a 64 MiB `DefaultMaxSize`), and an inline text/calendar
+part is now converted to UTF-8 by `Attachment.Text` instead of being read as raw bytes. Rendering by RFC 5322
+quotes more names than v0.5.0 did (a name with `.` or `(`): 3 of the 12 evaluation messages show their From that
+way; nothing else in their output changed.
+
 ---
 
 ## Indicator Engine

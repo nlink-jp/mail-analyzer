@@ -115,8 +115,9 @@ cp config.example.toml ~/.config/mail-analyzer/config.toml
 Notes on the fields:
 
 - `from` is the first From field; every From field (a duplicate is a warning) is read by the rules and shown
-  to the LLM. Mailboxes are rendered `Name <address>`, a bare address without brackets; a display name holding
-  `<`, `>`, `@`, `,`, `"` or `\` is quoted so it reads as a name. An Exchange `/O=...` sender is shown as written.
+  to the LLM. Mailboxes are rendered in RFC 5322 form, `Name <address>`, a bare address without brackets; a
+  display name that is not plain words — one holding `<`, `@`, `,`, `.`, `(` or a quote — is quoted, so a name
+  that looks like an address stays a name. An Exchange `/O=...` sender is shown as written.
 - `authentication` takes the most severe verdict per method across all `Authentication-Results` fields;
   `per_header` (topmost first) and `conflicting` appear when there is more than one. Forwarded mail carries one
   field per receiving hop, and they often disagree.

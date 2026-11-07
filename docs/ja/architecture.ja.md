@@ -116,6 +116,14 @@ SHA-256 ハッシュを足すだけになった。置き換えた自前のパー
 **v2 の RFC 2047 の補修は？** mailparse が引き継いだ（`repaired_encoded_word` の警告つき）。文字コードを
 `<meta charset>` でしか示さない HTML の扱いも mailparse にある。
 
+**v0.5.0 が mailparse の外で補っていたこと（v0.6.0 では外した）。** v0.5.0 は、メールボックスを独自の規則で
+引用して書き、入れ子の警告に経路を自分で付け、`.msg` の本文の RTF の写しをパート名で見分け、`Received` の
+空白をまとめ、大きさの上限を引き上げていた。mailparse v0.2.0 がそれぞれを持つようになった（`Mailbox.String`、
+`Message.AllWarnings`、`Body.Origin`、`Field.Collapsed`、64 MiB の `DefaultMaxSize`）。インラインの
+text/calendar のパートも、生のバイト列のままではなく `Attachment.Text` で UTF-8 に変える。RFC 5322 に沿って
+書くので、v0.5.0 より多くの表示名を引用する（`.` や `(` を含む名前）。評価用の 12 通のうち 3 通で From の
+表示がそう変わり、ほかの出力は変わらなかった。
+
 ---
 
 ## インジケーターエンジン

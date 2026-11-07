@@ -17,10 +17,6 @@ import (
 	"github.com/nlink-jp/mailparse"
 )
 
-// maxInputSize bounds one input file. mailparse's default (30 MiB) is below
-// what a 25 MiB attachment becomes in Base64, so it is raised.
-const maxInputSize = 64 << 20
-
 // Email is the structured representation of a parsed email message.
 //
 // The string fields are display forms. The rules read the structured fields
@@ -61,6 +57,9 @@ type Email struct {
 	Nested []*Email `json:"nested,omitempty"`
 	// Part is where this message sits in its parent ("" for the top one).
 	Part string `json:"part,omitempty"`
+
+	// msg is the message this Email was shaped from; nil for one built by hand.
+	msg *mailparse.Message
 }
 
 // Mailbox is one parsed address. Name is the decoded display name: attacker
@@ -85,10 +84,13 @@ type BodyPart struct {
 	// Part is where the body came from: a MIME part path, or for a .msg or
 	// TNEF the property ("msg/body", "msg/html", "msg/rtf").
 	Part string `json:"part,omitempty"`
+	// Origin is mailparse's kind of source: "mime", "mapi", "rtf" (Outlook's
+	// compressed RTF) or "tnef".
+	Origin string `json:"origin,omitempty"`
 }
 
 // fromRTF reports whether the body was taken out of Outlook's compressed RTF.
-func (bp BodyPart) fromRTF() bool { return strings.HasSuffix(bp.Part, "/rtf") }
+func (bp BodyPart) fromRTF() bool { return bp.Origin == "rtf" }
 
 // Attachment holds metadata and hash for an attached file.
 type Attachment struct {
@@ -126,32 +128,15 @@ func (e *Email) bodyOfType(mediaType string) string {
 }
 
 // AllWarnings returns this message's warnings followed by those of every
-// nested message, the latter with their Part prefixed by the path of the
-// attachment that held them ("2>1" is part 1 of the message attached as 2,
-// "2" its header).
+// nested message, the latter with their Part made absolute ("2>1" is part 1 of
+// the message attached as 2, "2" its header), as mailparse's
+// Message.AllWarnings gives them. An Email built by hand gives its own
+// Warnings.
 func (e *Email) AllWarnings() []Warning {
-	var out []Warning
-	var walk func(m *Email, prefix string)
-	walk = func(m *Email, prefix string) {
-		for _, w := range m.Warnings {
-			switch {
-			case prefix != "" && w.Part != "":
-				w.Part = prefix + ">" + w.Part
-			case prefix != "":
-				w.Part = prefix // the nested message's own header
-			}
-			out = append(out, w)
-		}
-		for _, n := range m.Nested {
-			p := n.Part
-			if prefix != "" {
-				p = prefix + ">" + p
-			}
-			walk(n, p)
-		}
+	if e.msg == nil {
+		return e.Warnings
 	}
-	walk(e, "")
-	return out
+	return warnings(e.msg.AllWarnings())
 }
 
 // ParseFile reads and parses an email file, dispatching by extension.
@@ -165,7 +150,7 @@ func ParseFile(path string) (*Email, error) {
 
 // ParseBytes parses email bytes, dispatching by filename extension.
 func ParseBytes(data []byte, filename string) (*Email, error) {
-	opt := mailparse.Options{MaxSize: maxInputSize}
+	var opt mailparse.Options // MaxSize: mailparse.DefaultMaxSize (64 MiB)
 	lower := strings.ToLower(filename)
 	var m *mailparse.Message
 	var err error
@@ -187,11 +172,11 @@ func ParseBytes(data []byte, filename string) (*Email, error) {
 
 // ParseReader reads from an io.Reader and parses as EML.
 func ParseReader(r io.Reader, source string) (*Email, error) {
-	data, err := io.ReadAll(io.LimitReader(r, maxInputSize+1))
+	data, err := io.ReadAll(io.LimitReader(r, mailparse.DefaultMaxSize+1))
 	if err != nil {
 		return nil, fmt.Errorf("reading stdin: %w", err)
 	}
-	m, err := mailparse.ParseEML(bytes.NewReader(data), mailparse.Options{MaxSize: maxInputSize})
+	m, err := mailparse.ParseEML(bytes.NewReader(data), mailparse.Options{})
 	if err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", source, err)
 	}
@@ -209,6 +194,7 @@ func FromMessage(m *mailparse.Message, source string) *Email {
 		Subject:     m.Subject,
 		Body:        []BodyPart{},
 		Attachments: []Attachment{},
+		msg:         m,
 	}
 	h := m.Header
 	e.InReplyTo = firstValue(h, "In-Reply-To")
@@ -217,7 +203,7 @@ func FromMessage(m *mailparse.Message, source string) *Email {
 	for _, f := range h.All("Received") {
 		// Folding whitespace is joined into one space, as net/textproto
 		// did: the routing rules match "by " and would miss "by\t".
-		e.Received = append(e.Received, unfold(f.Value))
+		e.Received = append(e.Received, f.Collapsed())
 	}
 	for _, f := range h.All("Authentication-Results") {
 		e.AllAuthResults = append(e.AllAuthResults, strings.TrimSpace(f.Value))
@@ -255,14 +241,14 @@ func FromMessage(m *mailparse.Message, source string) *Email {
 		e.ReturnPaths = append(e.ReturnPaths, addr)
 	}
 	if e.ReturnPath == "" && len(m.ReturnPath) > 0 {
-		e.ReturnPath = unfold(m.ReturnPath[0].Raw)
+		e.ReturnPath = collapse(m.ReturnPath[0].Raw)
 	}
 	e.To = displayAll(m.To)
 	e.CC = displayAll(m.Cc)
 	e.BCC = displayAll(m.Bcc)
 
 	for _, b := range m.Bodies {
-		e.Body = append(e.Body, BodyPart{Type: b.MediaType, Content: toLF(b.Content), Part: b.Part})
+		e.Body = append(e.Body, BodyPart{Type: b.MediaType, Content: toLF(b.Content), Part: b.Part, Origin: b.Origin})
 		if e.Encoding == "" && b.Charset != "" && !isUTF8OrASCII(b.Charset) {
 			e.Encoding = strings.ToUpper(b.Charset)
 		}
@@ -272,9 +258,9 @@ func FromMessage(m *mailparse.Message, source string) *Email {
 		if isInlineText(a) {
 			// mailparse makes bodies of text/plain and text/html only; another
 			// unnamed inline text part (a text/calendar invite...) was a body
-			// before and its links were checked, so it stays one. Its bytes
-			// are not charset-converted: only URL extraction reads it.
-			e.Body = append(e.Body, BodyPart{Type: a.MediaType, Content: toLF(string(a.Data)), Part: a.Part})
+			// before and its links were checked, so it stays one, converted to
+			// UTF-8 by the rules bodies use.
+			e.Body = append(e.Body, BodyPart{Type: a.MediaType, Content: toLF(a.Text().Content), Part: a.Part, Origin: "mime"})
 			continue
 		}
 		filename := a.Filename
@@ -301,10 +287,16 @@ func FromMessage(m *mailparse.Message, source string) *Email {
 		}
 	}
 
-	for _, w := range m.Warnings {
-		e.Warnings = append(e.Warnings, Warning{Code: w.Code, Detail: w.Detail, Part: w.Part})
-	}
+	e.Warnings = warnings(m.Warnings)
 	return e
+}
+
+func warnings(ws []mailparse.Warning) []Warning {
+	var out []Warning
+	for _, w := range ws {
+		out = append(out, Warning{Code: w.Code, Detail: w.Detail, Part: w.Part})
+	}
+	return out
 }
 
 // isInlineText reports an unnamed text part not marked as an attachment, which
@@ -346,7 +338,7 @@ func displayField(al mailparse.AddressList) []string {
 		}
 	}
 	if !usable {
-		if raw := strings.TrimSpace(unfold(al.Raw)); raw != "" {
+		if raw := collapse(al.Raw); raw != "" {
 			return []string{raw}
 		}
 		return nil
@@ -371,27 +363,17 @@ func displayAll(lists []mailparse.AddressList) []string {
 	return out
 }
 
-// unfold joins folded header lines.
-func unfold(s string) string {
+// collapse joins the folded lines of a raw address field into one; a Field
+// has Collapsed for this, an AddressList's Raw does not.
+func collapse(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// String renders the mailbox as `Name <address>`. A name holding a character
-// that would make the rendering ambiguous ('<', '>', '@', ',', '"', '\') is
-// quoted, so a name that looks like an address stays visibly a name.
+// String renders the mailbox in RFC 5322 form with mailparse's Mailbox.String:
+// a display name that is not plain atoms is quoted, so a name that looks like
+// an address stays a name, and reading the result again gives this mailbox.
 func (mb Mailbox) String() string {
-	name := mb.Name
-	if strings.ContainsAny(name, "<>@,\"\\") {
-		name = `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(name) + `"`
-	}
-	switch {
-	case name == "":
-		return mb.Address
-	case mb.Address == "":
-		return name
-	default:
-		return name + " <" + mb.Address + ">"
-	}
+	return mailparse.Mailbox{Name: mb.Name, Address: mb.Address}.String()
 }
 
 func isUTF8OrASCII(charset string) bool {
