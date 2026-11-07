@@ -12,9 +12,6 @@ type URLResult struct {
 	URL        string `json:"url"`
 	Suspicious bool   `json:"suspicious"`
 	Reason     string `json:"reason,omitempty"`
-	// InMessage is set for a URL found only in an attached message: the path
-	// of the attachment that held that message.
-	InMessage string `json:"in_message,omitempty"`
 }
 
 var (
@@ -64,20 +61,11 @@ var suspiciousTLDs = map[string]bool{
 	".rest": true, ".monster": true, ".sbs": true, ".cyou": true,
 }
 
-// analyzeURLs checks the URLs in the bodies of the message and of every message
-// attached to it.
 func analyzeURLs(email *parser.Email) []URLResult {
 	seen := map[string]bool{}
 	var results []URLResult
-	walkMessages(email, func(m *parser.Email, in string) {
-		results = append(results, checkURLs(m.Body, in, seen)...)
-	})
-	return results
-}
 
-func checkURLs(body []parser.BodyPart, in string, seen map[string]bool) []URLResult {
-	var results []URLResult
-	for _, bp := range body {
+	for _, bp := range email.Body {
 		urls := extractURLs(bp.Content)
 		for _, u := range urls {
 			if seen[u] {
@@ -90,7 +78,7 @@ func checkURLs(body []parser.BodyPart, in string, seen map[string]bool) []URLRes
 				continue
 			}
 
-			result := URLResult{URL: defangURL(u), InMessage: in}
+			result := URLResult{URL: defangURL(u)}
 			domain := extractURLDomain(u)
 
 			switch {

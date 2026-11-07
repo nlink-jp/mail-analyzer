@@ -14,7 +14,7 @@ NOTARY_PROFILE    ?= nlink-jp-notary
 # darwin ships arm64 only (no amd64, no universal). linux/windows keep their matrix.
 PLATFORMS := darwin/arm64 linux/amd64 linux/arm64 windows/amd64
 
-.PHONY: build build-all package verify-release test lint clean
+.PHONY: build build-all package verify-release test clean
 
 build:
 	@mkdir -p $(DIST_DIR)
@@ -97,11 +97,6 @@ verify-release:
 
 test:
 	go test ./...
-
-## lint: gofmt (golangci-lint does not check it here) and golangci-lint.
-lint:
-	@test -z "$$(gofmt -l $(CURDIR))" || { gofmt -l $(CURDIR); echo "gofmt needed"; exit 1; }
-	golangci-lint run ./...
 
 clean:
 	rm -rf $(DIST_DIR)

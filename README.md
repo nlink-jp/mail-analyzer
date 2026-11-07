@@ -8,17 +8,9 @@ and LLM-powered content analysis.
 ## Features
 
 - **Dual analysis engine**: deterministic rule-based indicators + Gemini LLM content analysis
-- **EML and MSG support**: read by [mailparse](https://github.com/nlink-jp/mailparse), written for
-  attacker-composed mail — every header field in order with duplicates kept, addresses parsed before display
-  names are decoded, full charset handling (ISO-2022-JP, Shift_JIS, EUC-JP, HTML `<meta charset>`), Outlook
-  compressed RTF bodies and winmail.dat (TNEF)
-- **Attached messages are opened**: a forwarded `.eml`/`.msg` (message/rfc822 or recognized by content), an
-  embedded `.msg` and winmail.dat — their URLs and attachments are checked too (`in_message`)
-- **Parse warnings**: a malformed header line, a duplicated From, damaged Base64, an unclosed boundary... are
-  reported (`parse_warnings`) instead of being dropped silently
+- **EML and MSG support**: full charset handling (ISO-2022-JP, Shift_JIS, EUC-JP, etc.)
 - **SHA-256 hashes**: file hash and per-attachment hashes for IoC correlation
-- **Authentication analysis**: SPF, DKIM, DMARC from every `Authentication-Results` field; the most severe
-  verdict wins, so a forged `pass` placed on top cannot hide a `fail`
+- **Authentication analysis**: SPF, DKIM, DMARC result parsing
 - **Sender integrity**: From/Return-Path mismatch, display name spoofing, Reply-To divergence
 - **URL analysis**: extraction, defanging, free hosting / shortener / suspicious TLD detection
 - **Attachment analysis**: dangerous extensions, macro-enabled Office, double extensions
@@ -90,13 +82,9 @@ cp config.example.toml ~/.config/mail-analyzer/config.toml
   "to": ["..."],
   "date": "...",
   "indicators": {
-    "authentication": {
-      "spf": "fail", "dkim": "pass", "dmarc": "fail",
-      "per_header": [{ "spf": "pass", "dkim": "pass", "dmarc": "pass" }, { "spf": "fail", "dkim": "pass", "dmarc": "fail" }],
-      "conflicting": true
-    },
+    "authentication": { "spf": "fail", "dkim": "pass", "dmarc": "fail" },
     "sender": { "from_return_path_mismatch": true, ... },
-    "urls": [{ "url": "hxxps://evil[.]com/path", "suspicious": true, "reason": "...", "in_message": "2" }],
+    "urls": [{ "url": "hxxps://evil[.]com/path", "suspicious": true, "reason": "..." }],
     "attachments": [{ "filename": "...", "hash": "sha256...", "suspicious": false }],
     "routing": { "hop_count": 7, "x_mailer": "...", "x_mailer_suspicious": false }
   },
@@ -107,25 +95,9 @@ cp config.example.toml ~/.config/mail-analyzer/config.toml
     "summary": "...",
     "reasons": ["...", "..."],
     "tags": ["...", "..."]
-  },
-  "parse_warnings": [{ "code": "duplicate_field", "detail": "...", "part": "" }]
+  }
 }
 ```
-
-Notes on the fields:
-
-- `from` is the first From field; every From field (a duplicate is a warning) is read by the rules and shown
-  to the LLM. Mailboxes are rendered in RFC 5322 form, `Name <address>`, a bare address without brackets; a
-  display name that is not plain words — one holding `<`, `@`, `,`, `.`, `(` or a quote — is quoted, so a name
-  that looks like an address stays a name. An Exchange `/O=...` sender is shown as written.
-- `authentication` takes the most severe verdict per method across all `Authentication-Results` fields;
-  `per_header` (topmost first) and `conflicting` appear when there is more than one. Forwarded mail carries one
-  field per receiving hop, and they often disagree.
-- `in_message` marks a URL or attachment found in an attached message: the part path of that attachment
-  (`2`, `msg/attach/1`; `2>1` for a message inside a message).
-- An attachment whose bytes could not be extracted (an embedded `.msg`, an OLE object) has no `hash`.
-- `parse_warnings` lists mailparse's warning codes; `part` is where in the message (`2>1` inside an attached
-  message). Inputs over 64 MiB are refused.
 
 ## Building
 
@@ -133,7 +105,6 @@ Notes on the fields:
 make build      # Build for current platform → dist/
 make build-all  # Cross-compile all platforms
 make test       # Run tests
-make lint       # gofmt + golangci-lint
 make clean      # Remove dist/
 ```
 

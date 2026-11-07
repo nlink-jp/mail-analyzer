@@ -23,10 +23,6 @@ type Result struct {
 	Date       string                `json:"date"`
 	Indicators *indicator.Indicators `json:"indicators"`
 	Judgment   *llm.Judgment         `json:"judgment"`
-	// ParseWarnings are what the parser met and handled (a malformed header
-	// line, a duplicated From, damaged Base64, an unclosed boundary...),
-	// those of attached messages included.
-	ParseWarnings []parser.Warning `json:"parse_warnings,omitempty"`
 }
 
 // Analyze performs complete email analysis: parse → indicators → LLM → result.
@@ -46,16 +42,15 @@ func Analyze(ctx context.Context, email *parser.Email, cfg *config.Config) (*Res
 
 	// 4. Assemble result
 	return &Result{
-		SourceFile:    email.Source,
-		Hash:          email.Hash,
-		MessageID:     email.MessageID,
-		Subject:       email.Subject,
-		From:          email.From,
-		To:            email.To,
-		Date:          email.Date,
-		Indicators:    indicators,
-		Judgment:      judgment,
-		ParseWarnings: email.AllWarnings(),
+		SourceFile: email.Source,
+		Hash:       email.Hash,
+		MessageID:  email.MessageID,
+		Subject:    email.Subject,
+		From:       email.From,
+		To:         email.To,
+		Date:       email.Date,
+		Indicators: indicators,
+		Judgment:   judgment,
 	}, nil
 }
 
@@ -154,6 +149,5 @@ func AnalyzeOffline(email *parser.Email) *Result {
 			Summary:      "Offline analysis (indicators only, no LLM): " + strings.Join(reasons, "; "),
 			Reasons:      reasons,
 		},
-		ParseWarnings: email.AllWarnings(),
 	}
 }

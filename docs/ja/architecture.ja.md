@@ -91,38 +91,22 @@ mail-analyzer は 3 つの中心的な原則に従う:
 - **ヘッダーへのアクセス**: Return-Path、Reply-To、Authentication-Results、X-Mailer が必要で、
   外部ツールはこれらを露出していなかった
 
-### mailparse で読む（v0.5.0）
+### 文字コードの扱い
 
-v0.5.0 から、メールの入れ物は組織共通のメールの読み取り [mailparse](https://github.com/nlink-jp/mailparse)
-（lib-series）で読む。`internal/parser` はその `Message` を、ルールとプロンプトが読む `Email` の形に直し、
-SHA-256 ハッシュを足すだけになった。置き換えた自前のパーサー（eml-to-jsonl と msg-to-jsonl から作ったもの）
-には、不審メールを判定する道具にとって重い欠陥が実測されていた（mailparse の段階 0 の記録）:
+電子メールはレガシーな文字エンコーディングの最後の砦の 1 つである。日本語のメールは
+ISO-2022-JP、Shift_JIS、EUC-JP を頻繁に使う。パーサーは文字コード変換に
+`golang.org/x/text/encoding/htmlindex` を用い、IANA に登録されたすべての文字コードをカバーする。
 
-- **名前ごとに 1 つのヘッダ。** `net/textproto` が名前ごとの map を作るので、From も
-  `Authentication-Results` も 1 つ目しか読まなかった。先頭に置かれた偽の `pass` が本物の `fail` を隠し、
-  攻撃者のアドレスを持つ 2 つ目の From は見えなかった。mailparse はすべてのフィールドを出てきた順・重複込みで返す
-- **解析の前に復号。** アドレスを分ける前に RFC 2047 を復号していたので、符号化した表示名から偽の
-  `<アドレス>` が現れた。mailparse はアドレスを先に解析し、表示名だけを復号する
-- **黙って失う。** コロンの無いヘッダ行 1 つでメール全体の解析に失敗し、閉じない境界の後ろのパートを捨て、
-  壊れた Base64 を空のデータとしてハッシュしていた。いまは読めるところまで読み、`parse_warnings` のコードで知らせる
-- **.msg の固定長プロパティを読まなかった。** 日付は常に空で、受信者はすべて To（Bcc も）になっていた。
-  .msg のインターネットヘッダは行ごとに拾っていたので、折り返した値を失った。CFB はコミュニティ製のモジュール
-  （`richardlehane/mscfb`）に頼っていたが、mailparse は自前で読む
-- **添付されたメールを開かなかった。** 転送されたメール、埋め込みの `.msg`、winmail.dat は 1 つの添付として
-  ハッシュするだけだった。mailparse はそれらを開き、ルールはその中の URL と添付も調べる（`in_message`）
+### RFC 2047 の壊れた encoded-word の修復
 
-判断はこちらに残る: `Authentication-Results` の意味、URL の取り出し、添付の危険度。
+一部の MUA（メールユーザーエージェント）と MTA は、ヘッダーの折り返しの際に RFC 2047 の
+encoded-word の内部に改行を挿入し、Base64 のペイロードを空白で分断する。標準の
+`mime.WordDecoder` はこれに出会うと、（エラーを返さずに）黙って入力をそのまま返す。本パーサーは
+出力にデコードされていない `=?..?=` のマーカーがあることを検出し、Base64 ペイロードから空白を
+取り除いて再試行する。
 
-**v2 の RFC 2047 の補修は？** mailparse が引き継いだ（`repaired_encoded_word` の警告つき）。文字コードを
-`<meta charset>` でしか示さない HTML の扱いも mailparse にある。
-
-**v0.5.0 が mailparse の外で補っていたこと（v0.6.0 では外した）。** v0.5.0 は、メールボックスを独自の規則で
-引用して書き、入れ子の警告に経路を自分で付け、`.msg` の本文の RTF の写しをパート名で見分け、`Received` の
-空白をまとめ、大きさの上限を引き上げていた。mailparse v0.2.0 がそれぞれを持つようになった（`Mailbox.String`、
-`Message.AllWarnings`、`Body.Origin`、`Field.Collapsed`、64 MiB の `DefaultMaxSize`）。インラインの
-text/calendar のパートも、生のバイト列のままではなく `Attachment.Text` で UTF-8 に変える。RFC 5322 に沿って
-書くので、v0.5.0 より多くの表示名を引用する（`.` や `(` を含む名前）。評価用の 12 通のうち 3 通で From の
-表示がそう変わり、ほかの出力は変わらなかった。
+**なぜ全ヘッダーから空白をすべて取り除かないのか？** それでは表示名やその他のヘッダー
+フィールドの正当な空白が壊れてしまう。
 
 ---
 
@@ -133,15 +117,7 @@ text/calendar のパートも、生のバイト列のままではなく `Attachm
 
 ### 認証 (auth.go)
 
-すべての `Authentication-Results` フィールドから SPF、DKIM、DMARC の判定を読み、方式ごとに最も重いものを採る
-（fail > softfail > permerror > temperror > neutral > その他 > pass）。1 つ目だけを読むと、先頭に置かれた偽の
-`pass` が `fail` を隠せた。すべてを読めば順序でだまされない。転送されたメールには受け取った段ごとに 1 つずつ
-あり、実物では食い違うほうが普通（E2E の 12 通中 10 通）なので、フィールドごとの判定を `per_header` に出し、
-LLM には警告ではなく「転送でよく食い違う」と伝える。
-
-**なぜ authserv-id でフィールドを選ばないのか？** どの受信者が「自分たち」かという設定が要るが、この道具には
-無い。それは mail-dissect が行う。ここでは信頼できないヘッダの読み方として最も重い判定を採り、SPF/DMARC は
-どちらにしても weak シグナルのままである。
+`Authentication-Results` ヘッダーを SPF、DKIM、DMARC の判定結果についてパースする。
 
 **なぜ weak シグナルなのか？** SPF と DMARC は、転送（Gmail → 別のアカウント）、メーリング
 リストのリレー、サードパーティのマーケティングプラットフォーム（Salesforce Marketing Cloud、
@@ -314,8 +290,6 @@ API のエラー（429、500、503）は指数バックオフ（基準 5s、上�
 |----------|-----------|
 | Python ではなく Go | 単一バイナリ、起動が速い、eml-to-jsonl/msg-to-jsonl のパーサーをそのまま再利用できる |
 | 外部 CLI ではなく内部パーサー | 単一バイナリでの配布、ハッシュ計算のための添付バイトへのアクセス、Return-Path/Reply-To/Authentication-Results へのアクセス |
-| 自前のパーサーから mailparse へ（v0.5.0） | 全ヘッダを重複込みで、アドレスは復号の前に解析、黙って捨てない、入れ子のメールを開く、コミュニティ製の CFB を使わない |
-| Authentication-Results は最も重い判定 | 順序に左右されない（偽の `pass` で `fail` を隠せない）。authserv-id の設定が要らない |
 | MD5/SHA-1 ではなく SHA-256 のみ | MD5 と SHA-1 には既知の衝突攻撃がある。SHA-256 は IoC の突き合わせの標準である（STIX 2.1、VirusTotal） |
 | google.golang.org/genai SDK | vertexai/genai は 2025 年 6 月に非推奨。genai が現役の後継である |
 | プロンプト先頭のインジェクション対策 | LLM は早い位置の指示により注意を払う。長い規則の後に対策を置くと優先度が下げられる危険がある |

@@ -15,9 +15,6 @@ type AttachResult struct {
 	Hash       string `json:"hash,omitempty"`
 	Suspicious bool   `json:"suspicious"`
 	Reason     string `json:"reason,omitempty"`
-	// InMessage is set for an attachment of an attached message: the path of
-	// the attachment that held that message.
-	InMessage string `json:"in_message,omitempty"`
 }
 
 // Dangerous file extensions commonly used in malware delivery.
@@ -37,25 +34,14 @@ var macroExtensions = map[string]bool{
 	".xltm": true, ".potm": true, ".sldm": true,
 }
 
-// analyzeAttachments checks the attachments of the message and of every
-// message attached to it (a forwarded mail, an embedded .msg, winmail.dat).
 func analyzeAttachments(email *parser.Email) []AttachResult {
 	var results []AttachResult
-	walkMessages(email, func(m *parser.Email, in string) {
-		results = append(results, checkAttachments(m.Attachments, in)...)
-	})
-	return results
-}
-
-func checkAttachments(atts []parser.Attachment, in string) []AttachResult {
-	var results []AttachResult
-	for _, a := range atts {
+	for _, a := range email.Attachments {
 		result := AttachResult{
-			Filename:  a.Filename,
-			MIMEType:  a.MIMEType,
-			Size:      a.Size,
-			Hash:      a.Hash,
-			InMessage: in,
+			Filename: a.Filename,
+			MIMEType: a.MIMEType,
+			Size:     a.Size,
+			Hash:     a.Hash,
 		}
 
 		ext := strings.ToLower(filepath.Ext(a.Filename))
