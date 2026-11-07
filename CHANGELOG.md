@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-11-07
+
+### Changed
+
+- **Mail is read by [mailparse](https://github.com/nlink-jp/mailparse) v0.1.0** instead of the in-house
+  `.eml`/`.msg` parser. The community modules `richardlehane/mscfb` and `msoleps` are gone; mailparse reads
+  the Outlook container in-house.
+- **Every `Authentication-Results` field is read**, and each of SPF, DKIM and DMARC takes the most severe
+  verdict any of them gave. Only the first field was read before (and only its first line in a `.msg`), so a
+  forged `pass` on top hid a `fail` below. `authentication` gains `per_header` and `conflicting` when there is
+  more than one field. On 12 real messages this changed the verdicts of 3 and raised the offline confidence of
+  2 by 0.1 (a weak reason added); no judgment changed.
+- **The sender rules read every From mailbox** (every From field, every mailbox in it), every Reply-To mailbox
+  and every Return-Path, instead of the first From string.
+- **Display form of addresses**: mailboxes are rendered from the parsed address — `Name <address>`, a bare
+  address without angle brackets (it was `<address>` when the header wrote it so), quotes of the header gone,
+  and a display name holding `<`, `>`, `@`, `,`, `"` or `\` quoted. `to`/`cc`/`bcc` split on real address
+  boundaries, not on every comma.
+- **`.msg` identity comes from the internet headers** when Outlook kept them (From, To, Cc, Subject, Date), and
+  from the MAPI properties otherwise; an Exchange `/O=...` sender is shown as written instead of dropped.
+- **Bodies have LF line ends** (the LLM excerpt mixed CRLF and LF before), and in a `.msg` the copy of the
+  body taken from the compressed RTF is left out of the LLM excerpt when another body of that type exists; its
+  links are still checked.
+- **Inputs over 64 MiB are refused**; a part over 25 MiB used to be cut silently (and hashed cut).
+
+### Added
+
+- **`parse_warnings`** in the output: mailparse's warning codes for what it met and handled (a malformed header
+  line, a duplicated From, damaged Base64, an unclosed boundary, a `.msg` without internet headers...), those
+  of attached messages included. The LLM is given the codes.
+- **Attached messages are opened**: message/rfc822, a message attached under another type, an embedded `.msg`
+  and winmail.dat (TNEF). Their URLs and attachments are checked like the outer ones and marked `in_message`.
+- **The LLM sees every From field** (one `From:` line each) and the per-field Authentication-Results verdicts.
+- `make lint` (gofmt + golangci-lint).
+
+### Fixed
+
+- **An encoded display name can no longer inject an address**: RFC 2047 was decoded before addresses were
+  split, so `=?UTF-8?B?...?= <attacker@...>` became `Bank <security@bank.example> <attacker@...>` and the
+  display-name spoofing rule missed it. Addresses are parsed first; the rule now fires.
+- **A header line without a colon no longer fails the whole message.**
+- **The part after an unclosed multipart boundary is no longer dropped.**
+- **An attachment with damaged Base64 is hashed from the bytes that decode**, not as empty data.
+- **HTML that declares Shift_JIS only in `<meta charset>` is no longer garbled.**
+- **`.msg`: the date is read** (it was always empty), **Bcc recipients are no longer listed as To**, and
+  folded header values are read whole.
+- **Outlook compressed-RTF bodies and winmail.dat contents are analysed** — their links and attachments were
+  not seen.
+
 ## [0.4.0] - 2026-11-04
 
 ### Changed
