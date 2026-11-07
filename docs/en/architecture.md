@@ -95,23 +95,31 @@ v2 internalizes the parsers for:
 - **Header access**: we need Return-Path, Reply-To, Authentication-Results,
   and X-Mailer which the external tools didn't expose
 
-### Charset handling
+### Reading through mailparse (v0.5.0)
 
-Email is one of the last bastions of legacy character encodings. Japanese
-emails frequently use ISO-2022-JP, Shift_JIS, and EUC-JP. The parser uses
-`golang.org/x/text/encoding/htmlindex` for charset conversion, covering
-all IANA-registered charsets.
+Since v0.5.0 the container is read by [mailparse](https://github.com/nlink-jp/mailparse) (lib-series), the
+organization's shared mail reader; `internal/parser` only shapes its `Message` into the `Email` the rules and
+the prompt read, and adds the SHA-256 hashes. The in-house parser it replaced — built from eml-to-jsonl and
+msg-to-jsonl — had measured defects (mailparse's Phase 0 record) that matter for a tool judging hostile mail:
 
-### RFC 2047 broken encoded-word repair
+- **One header per name.** `net/textproto` kept a map, so only the first From and the first
+  `Authentication-Results` were read: a forged `pass` placed on top hid a real `fail`, and a second From
+  carrying the attacker's address was invisible. mailparse keeps every field, in order, duplicates included.
+- **Decoding before parsing.** RFC 2047 was decoded before addresses were split, so an encoded display name
+  could produce a fake `<address>`. mailparse parses addresses first and decodes only the display name.
+- **Silent loss.** A header line without a colon failed the whole message; an unclosed boundary dropped the
+  part after it; damaged Base64 was hashed as empty data. Each of these is now read as far as it goes and
+  reported as a `parse_warnings` code.
+- **.msg fixed-length properties were never read**, so the date was always empty and every recipient was a To
+  (Bcc included); the internet headers of a `.msg` were scanned line by line, losing folded values. The CFB
+  container came from a community module (`richardlehane/mscfb`); mailparse reads it in-house.
+- **Attached messages were opaque.** A forwarded message, an embedded `.msg` or winmail.dat was one hashed
+  attachment; mailparse opens them, and the rules check their URLs and attachments (`in_message`).
 
-Some MUAs (mail user agents) and MTAs insert line breaks inside RFC 2047
-encoded-words during header folding, splitting Base64 payloads with spaces.
-Standard `mime.WordDecoder` silently returns the input unchanged (no error)
-when it encounters this. Our parser detects undecoded `=?..?=` markers in
-the output and retries after stripping spaces from the Base64 payload.
+What the rules decide stays here: the meaning of `Authentication-Results`, URL extraction, attachment risk.
 
-**Why not just strip all spaces from all headers?** That would break
-legitimate spaces in display names and other header fields.
+**Why not keep the RFC 2047 repair of v2?** mailparse took it over (with a `repaired_encoded_word` warning),
+together with `<meta charset>` for HTML that declares its charset only there.
 
 ---
 
@@ -122,7 +130,16 @@ Indicators are classified as **strong** or **weak** signals.
 
 ### Authentication (auth.go)
 
-Parses the `Authentication-Results` header for SPF, DKIM, and DMARC verdicts.
+Parses every `Authentication-Results` field for SPF, DKIM, and DMARC verdicts and keeps, per method, the most
+severe (fail > softfail > permerror > temperror > neutral > other > pass). Reading only the first field let a
+forged `pass` placed on top hide a `fail`; reading all of them cannot be fooled by order. Forwarded mail
+carries one field per receiving hop, and in real mail they disagree more often than not (10 of the 12 E2E
+samples), so the per-field verdicts are reported (`per_header`) and the LLM is told that forwarding commonly
+causes the disagreement, rather than being alerted.
+
+**Why not choose the field by authserv-id?** That needs to know which receiver is "ours" — configuration this
+tool does not have. mail-dissect does it; here the most severe verdict is the safe reading of an untrusted
+header, and SPF/DMARC stay weak signals either way.
 
 **Why weak signals?** SPF and DMARC frequently fail for legitimate email due
 to forwarding (Gmail → another account), mailing list relays, and third-party
@@ -309,6 +326,8 @@ goods, `bec` for invoice fraud).
 |----------|-----------|
 | Go (not Python) | Single binary, fast startup, parsers from eml-to-jsonl/msg-to-jsonl reusable directly |
 | Internal parsers (not external CLI) | Single binary deployment, access to attachment bytes for hashing, access to Return-Path/Reply-To/Authentication-Results |
+| mailparse instead of the in-house parser (v0.5.0) | Every header field with duplicates, addresses parsed before decoding, nothing dropped silently, nested messages opened, no community CFB module |
+| Most severe Authentication-Results verdict | Order-independent: a forged `pass` cannot hide a `fail`; no authserv-id configuration needed |
 | SHA-256 only (not MD5/SHA-1) | MD5 and SHA-1 have known collision attacks; SHA-256 is the standard for IoC correlation (STIX 2.1, VirusTotal) |
 | google.golang.org/genai SDK | vertexai/genai deprecated June 2025; genai is the active replacement |
 | Prompt injection defense at prompt top | LLMs attend more to early instructions; placing defense after long rules risks deprioritization |
