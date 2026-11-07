@@ -83,7 +83,7 @@ func TestParseReaderAsEML(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	email, err := ParseReader(f, "stdin")
 	if err != nil {

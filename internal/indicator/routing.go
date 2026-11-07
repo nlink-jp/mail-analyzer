@@ -9,11 +9,11 @@ import (
 
 // RoutingResult holds email routing analysis.
 type RoutingResult struct {
-	HopCount       int      `json:"hop_count"`
-	SuspiciousHops []string `json:"suspicious_hops,omitempty"`
-	XMailer        string   `json:"x_mailer,omitempty"`
-	XMailerSuspicious bool  `json:"x_mailer_suspicious,omitempty"`
-	Details        string   `json:"details,omitempty"`
+	HopCount          int      `json:"hop_count"`
+	SuspiciousHops    []string `json:"suspicious_hops,omitempty"`
+	XMailer           string   `json:"x_mailer,omitempty"`
+	XMailerSuspicious bool     `json:"x_mailer_suspicious,omitempty"`
+	Details           string   `json:"details,omitempty"`
 }
 
 // Known mass-mailing / phishing tool signatures in X-Mailer.
@@ -36,9 +36,9 @@ var suspiciousMailers = []string{
 
 // Patterns that suggest suspicious Received headers.
 var (
-	localhostPattern = regexp.MustCompile(`(?i)\bfrom\s+(localhost|127\.0\.0\.1|\[127\.0\.0\.1\]|unknown)\b`)
+	localhostPattern   = regexp.MustCompile(`(?i)\bfrom\s+(localhost|127\.0\.0\.1|\[127\.0\.0\.1\]|unknown)\b`)
 	localDomainPattern = regexp.MustCompile(`(?i)\.(local|localdomain|internal|home|lan)\b`)
-	ipOnlyPattern = regexp.MustCompile(`\bfrom\s+\[?\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\]?\s`)
+	ipOnlyPattern      = regexp.MustCompile(`\bfrom\s+\[?\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\]?\s`)
 )
 
 func analyzeRouting(email *parser.Email) RoutingResult {
