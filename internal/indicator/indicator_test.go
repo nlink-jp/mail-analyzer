@@ -1,66 +1,94 @@
 package indicator
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/nlink-jp/mail-analyzer/internal/parser"
+	"github.com/nlink-jp/mailparse"
 )
 
 func TestAnalyzeAuth(t *testing.T) {
 	tests := []struct {
-		name        string
-		authResults string
-		wantSPF     string
-		wantDKIM    string
-		wantDMARC   string
+		name            string
+		fields          []string
+		wantSPF         string
+		wantDKIM        string
+		wantDMARC       string
+		wantConflicting bool
 	}{
-		{"all pass", "spf=pass dkim=pass dmarc=pass", "pass", "pass", "pass"},
-		{"all fail", "spf=fail dkim=fail dmarc=fail", "fail", "fail", "fail"},
-		{"empty", "", "none", "none", "none"},
-		{"mixed", "spf=softfail dkim=pass dmarc=none", "softfail", "pass", "none"},
-		{"with details", "mx.google.com; spf=pass (sender ok); dkim=pass", "pass", "pass", "none"},
+		{"all pass", []string{"spf=pass dkim=pass dmarc=pass"}, "pass", "pass", "pass", false},
+		{"all fail", []string{"spf=fail dkim=fail dmarc=fail"}, "fail", "fail", "fail", false},
+		{"empty", nil, "none", "none", "none", false},
+		{"mixed", []string{"spf=softfail dkim=pass dmarc=none"}, "softfail", "pass", "none", false},
+		{"with details", []string{"mx.google.com; spf=pass (sender ok); dkim=pass"}, "pass", "pass", "none", false},
+		// The top field (the receiving server's own) decides; a lower field
+		// that disagrees, as after forwarding or a forged field, only raises
+		// the flag.
+		{"forwarded", []string{"mx.example.com; spf=fail dkim=pass dmarc=pass", "first.example.net; spf=pass dkim=pass dmarc=pass"}, "fail", "pass", "pass", true},
+		{"forged below", []string{"mx.example.com; spf=fail dkim=none dmarc=fail", "forged.example; spf=pass dkim=pass dmarc=pass"}, "fail", "none", "fail", true},
+		// Fields that agree, or that speak of mechanisms the other does not, do not conflict.
+		{"agree", []string{"a.example; spf=pass", "b.example; spf=pass dkim=pass"}, "pass", "none", "none", false},
+		{"lower speaks of more", []string{"a.example; arc=none", "b.example; spf=pass"}, "none", "none", "none", false},
+		// Within one field the first result counts, as before.
+		{"two signatures in one field", []string{"mx.example.com; dkim=pass header.d=a.example; dkim=fail header.d=b.example"}, "none", "pass", "none", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := analyzeAuth(tt.authResults)
-			if result.SPF != tt.wantSPF {
-				t.Errorf("SPF = %q, want %q", result.SPF, tt.wantSPF)
+			result := analyzeAuth(tt.fields)
+			if result.SPF != tt.wantSPF || result.DKIM != tt.wantDKIM || result.DMARC != tt.wantDMARC || result.Conflicting != tt.wantConflicting {
+				t.Errorf("got %+v, want spf=%s dkim=%s dmarc=%s conflicting=%v", result, tt.wantSPF, tt.wantDKIM, tt.wantDMARC, tt.wantConflicting)
 			}
-			if result.DKIM != tt.wantDKIM {
-				t.Errorf("DKIM = %q, want %q", result.DKIM, tt.wantDKIM)
-			}
-			if result.DMARC != tt.wantDMARC {
-				t.Errorf("DMARC = %q, want %q", result.DMARC, tt.wantDMARC)
+			if len(result.Raw) != len(tt.fields) {
+				t.Errorf("Raw = %q", result.Raw)
 			}
 		})
 	}
 }
 
+func mbs(list ...string) []mailparse.Mailbox {
+	var out []mailparse.Mailbox
+	for _, s := range list {
+		name, addr := "", s
+		if i := strings.LastIndex(s, "|"); i >= 0 {
+			name, addr = s[:i], s[i+1:]
+		}
+		out = append(out, mailparse.Mailbox{Name: name, Address: addr})
+	}
+	return out
+}
+
 func TestAnalyzeSender(t *testing.T) {
 	tests := []struct {
 		name           string
-		from           string
-		returnPath     string
-		replyTo        string
+		from           []string // "name|address" or "address"
+		returnPath     []string
+		replyTo        []string
 		wantMismatch   bool
 		wantSpoofing   bool
 		wantDivergence bool
 	}{
-		{"clean", "alice@example.com", "<alice@example.com>", "", false, false, false},
-		{"mismatch", "alice@example.com", "<bounce@other.com>", "", true, false, false},
-		{"spoofing", "admin@bank.com <hacker@evil.com>", "", "", false, true, false},
-		{"reply-to divergence", "alice@example.com", "", "hacker@evil.com", false, false, true},
-		{"subdomain bounce OK", "news@mag.subaru.jp", "<bounce@bounce.mag.subaru.jp>", "", false, false, false},
-		{"subdomain unrelated", "info@sbisec.co.jp", "<bounce@zh-net-jingjibao.com>", "", true, false, false},
+		{"clean", []string{"alice@example.com"}, []string{"alice@example.com"}, nil, false, false, false},
+		{"mismatch", []string{"alice@example.com"}, []string{"bounce@other.example"}, nil, true, false, false},
+		{"spoofing", []string{"admin@bank.example|hacker@evil.example"}, nil, nil, false, true, false},
+		{"reply-to divergence", []string{"alice@example.com"}, nil, []string{"hacker@evil.example"}, false, false, true},
+		{"subdomain bounce OK", []string{"news@mag.example.jp"}, []string{"bounce@bounce.mag.example.jp"}, nil, false, false, false},
+		{"subdomain unrelated", []string{"info@example.co.jp"}, []string{"bounce@unrelated.example"}, nil, true, false, false},
+		// A second From that matches the Return-Path cannot hide the first.
+		{"second from cannot hide", []string{"ceo@example.com", "x@evil.example"}, []string{"x@evil.example"}, nil, true, false, false},
+		// A second Reply-To that matches From cannot hide the first.
+		{"second reply-to cannot hide", []string{"alice@example.com"}, nil, []string{"alice@example.com", "x@evil.example"}, false, false, true},
+		// A name-only mailbox has no domain to compare.
+		{"name only", []string{"Someone|"}, []string{"bounce@other.example"}, nil, false, false, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			email := &parser.Email{
-				From:       tt.from,
-				ReturnPath: tt.returnPath,
-				ReplyTo:    tt.replyTo,
+				FromMailboxes:       mbs(tt.from...),
+				ReturnPathMailboxes: mbs(tt.returnPath...),
+				ReplyToMailboxes:    mbs(tt.replyTo...),
 			}
 			result := analyzeSender(email)
 			if result.FromReturnPathMismatch != tt.wantMismatch {
@@ -73,6 +101,43 @@ func TestAnalyzeSender(t *testing.T) {
 				t.Errorf("ReplyToDivergence = %v, want %v", result.ReplyToDivergence, tt.wantDivergence)
 			}
 		})
+	}
+}
+
+// URLs in nested messages and text/* attachments are found and labelled; a
+// URL already found in the outer body keeps the outer label.
+func TestAnalyzeURLsLayers(t *testing.T) {
+	email := &parser.Email{
+		Body: []parser.BodyPart{{Type: "text/plain", Content: "see https://shared.example.com/a"}},
+		Texts: []parser.Text{
+			{Layer: "3", Content: "https://shared.example.com/a and https://bit.ly/x"},
+			{Attachment: "invite.ics", Content: "URL:https://join.example.net/m"},
+		},
+	}
+	results := analyzeURLs(email)
+	if len(results) != 3 {
+		t.Fatalf("results = %+v", results)
+	}
+	if results[0].Layer != "" || results[1].Layer != "3" || !results[1].Suspicious || results[2].Attachment != "invite.ics" {
+		t.Fatalf("results = %+v", results)
+	}
+}
+
+func TestAnalyzeAttachmentsLayer(t *testing.T) {
+	email := &parser.Email{Attachments: []parser.Attachment{{Filename: "payload.exe", Layer: "2>1"}}}
+	results := analyzeAttachments(email)
+	if len(results) != 1 || !results[0].Suspicious || results[0].Layer != "2>1" {
+		t.Fatalf("results = %+v", results)
+	}
+}
+
+func TestWarningCodes(t *testing.T) {
+	email := &parser.Email{Warnings: []mailparse.Warning{
+		{Code: "duplicate_field"}, {Code: "invalid_address"}, {Code: "duplicate_field"},
+	}}
+	codes := Analyze(email).WarningCodes
+	if strings.Join(codes, ",") != "duplicate_field,invalid_address" {
+		t.Fatalf("codes = %q", codes)
 	}
 }
 
@@ -273,5 +338,23 @@ func TestFullIndicatorAnalysis(t *testing.T) {
 	}
 	if !hasSuspiciousURL {
 		t.Error("expected suspicious URL in indicators")
+	}
+}
+
+func TestWhere(t *testing.T) {
+	if (URLResult{}).Where() != "" || (URLResult{Layer: "2>1", Attachment: "a.ics"}).Where() != `in attached message 2>1, in text attachment "a.ics"` || (AttachResult{Layer: "2"}).Where() != "in attached message 2" {
+		t.Fatal("Where")
+	}
+}
+
+func TestPromptAuthResults(t *testing.T) {
+	raw := make([]string, 12)
+	for i := range raw {
+		raw[i] = "spf=pass"
+	}
+	raw[0] = strings.Repeat("あ", 400)
+	got := PromptAuthResults(raw)
+	if len(got) != 11 || got[10] != "(2 more not shown)" || got[0] != strings.Repeat("あ", 300)+"..." {
+		t.Fatalf("got %d %q", len(got), got[10])
 	}
 }

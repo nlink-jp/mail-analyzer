@@ -8,12 +8,20 @@ and LLM-powered content analysis.
 ## Features
 
 - **Dual analysis engine**: deterministic rule-based indicators + Gemini LLM content analysis
-- **EML and MSG support**: full charset handling (ISO-2022-JP, Shift_JIS, EUC-JP, etc.)
+- **EML, MSG and winmail.dat**: read by [mailparse](https://github.com/nlink-jp/mailparse), the
+  organization's mail parser written for attacker-composed mail; the format is recognized by
+  content; full charset handling (ISO-2022-JP, Shift_JIS, EUC-JP, etc.)
 - **SHA-256 hashes**: file hash and per-attachment hashes for IoC correlation
-- **Authentication analysis**: SPF, DKIM, DMARC result parsing
-- **Sender integrity**: From/Return-Path mismatch, display name spoofing, Reply-To divergence
-- **URL analysis**: extraction, defanging, free hosting / shortener / suspicious TLD detection
-- **Attachment analysis**: dangerous extensions, macro-enabled Office, double extensions
+- **Authentication analysis**: SPF, DKIM, DMARC from the top Authentication-Results (the
+  recipient's server's); every field kept raw, and a disagreeing lower field flagged as `conflicting`
+- **Sender integrity**: From/Return-Path mismatch, display name spoofing, Reply-To divergence —
+  checked over every mailbox, so a second From cannot hide the first
+- **URL analysis**: extraction, defanging, free hosting / shortener / suspicious TLD detection, in
+  the bodies, in attached (forwarded) messages and in text attachments such as calendar invitations
+- **Attachment analysis**: dangerous extensions, macro-enabled Office, double extensions, in
+  attached messages too
+- **Parser warnings**: what the parser met and handled (duplicated headers, malformed addresses,
+  broken encodings) in `warnings`; the LLM sees the warning codes
 - **Routing analysis**: X-Mailer classification, suspicious Received header detection
 - **Offline mode**: rule-based analysis without LLM (no API calls)
 - **Prompt injection defense**: nonce-tagged XML boundaries with defense instructions at prompt top
@@ -82,9 +90,10 @@ cp config.example.toml ~/.config/mail-analyzer/config.toml
   "to": ["..."],
   "date": "...",
   "indicators": {
-    "authentication": { "spf": "fail", "dkim": "pass", "dmarc": "fail" },
+    "authentication": { "spf": "fail", "dkim": "pass", "dmarc": "fail",
+                        "conflicting": true, "raw": ["mx.example.com; spf=fail ...", "..."] },
     "sender": { "from_return_path_mismatch": true, ... },
-    "urls": [{ "url": "hxxps://evil[.]com/path", "suspicious": true, "reason": "..." }],
+    "urls": [{ "url": "hxxps://evil[.]com/path", "suspicious": true, "reason": "...", "layer": "2" }],
     "attachments": [{ "filename": "...", "hash": "sha256...", "suspicious": false }],
     "routing": { "hop_count": 7, "x_mailer": "...", "x_mailer_suspicious": false }
   },
@@ -95,9 +104,20 @@ cp config.example.toml ~/.config/mail-analyzer/config.toml
     "summary": "...",
     "reasons": ["...", "..."],
     "tags": ["...", "..."]
-  }
+  },
+  "warnings": [{ "code": "duplicate_field", "detail": "..." }]
 }
 ```
+
+- `from` lists every From mailbox (joined by `, `); display names that are not plain atoms are
+  quoted, so a name that decodes to an address stays a name.
+- `layer` (on a URL or attachment) names the attached message it was found in, as a mailparse
+  `Message.Walk` path (`2`, `2>1`); absent for the outer message. `attachment` (on a URL) names the
+  text attachment it was found in.
+- `authentication.conflicting` is information only: forwarding produces it honestly.
+- `warnings` holds mailparse's warnings for the message and every attached message (stable codes,
+  see the mailparse README); always an array.
+- Files larger than 64 MiB are refused.
 
 ## Building
 

@@ -83,35 +83,34 @@ Input (.eml / .msg)
 
 ## Parser Design
 
-### Why internal parsers (not external tools)?
+### mailparse
 
-The original mail-analyzer depended on `eml-to-jsonl` and `msg-to-jsonl` as
-external CLI tools. This created deployment complexity and version coupling.
-v2 internalizes the parsers for:
+The message is read by [mailparse](https://github.com/nlink-jp/mailparse), the organization's mail
+parser (.eml, Outlook .msg and winmail.dat, recognized by content, not by file name). It is written
+for messages composed by an attacker: header fields are kept in order with duplicates, addresses are
+parsed before display names are decoded, and everything malformed, repaired or cut by a limit is
+reported as a warning. eml-to-jsonl, msg-to-jsonl and mail-analyzer-local read mail through it too.
 
-- **Single binary distribution**: no external dependencies at runtime
-- **Attachment binary access**: external tools output metadata only; we need
-  raw bytes to compute SHA-256 hashes
-- **Header access**: we need Return-Path, Reply-To, Authentication-Results,
-  and X-Mailer which the external tools didn't expose
+`internal/parser` holds no parsing of its own. It maps the `mailparse.Message` onto the `Email` the
+indicators and the prompt read, and is **identical in mail-analyzer and mail-analyzer-local**:
 
-### Charset handling
+| Email | From mailparse |
+|---|---|
+| `From`, `ReplyTo` (display) | every mailbox, `Mailbox.String()`, joined by `, ` |
+| `FromMailboxes`, `ReturnPathMailboxes`, `ReplyToMailboxes` | the typed mailboxes the sender checks read |
+| `To`, `CC`, `BCC` | every mailbox of every occurrence, `Mailbox.String()` |
+| `AuthResults`, `Received` | every field, `Field.Collapsed()`, top first |
+| `Body` | the outer message's bodies (an RTF copy only when there is no other body) |
+| `Attachments` | the attachments of every layer, with SHA-256 and the layer (`Message.Walk` path) |
+| `Texts` | further text searched for URLs: nested messages' bodies, text/* attachments (`Attachment.Text()`) |
+| `Warnings` | `Message.AllWarnings()` |
 
-Email is one of the last bastions of legacy character encodings. Japanese
-emails frequently use ISO-2022-JP, Shift_JIS, and EUC-JP. The parser uses
-`golang.org/x/text/encoding/htmlindex` for charset conversion, covering
-all IANA-registered charsets.
+**Why `Mailbox.String()` only?** Joining a decoded display name and an address re-creates the spoof
+the parser prevents: a name that decodes to `Bank <security@bank.example>` would read as an address.
+`Mailbox.String()` quotes such a name. The indicators read typed mailboxes, never the display strings.
 
-### RFC 2047 broken encoded-word repair
-
-Some MUAs (mail user agents) and MTAs insert line breaks inside RFC 2047
-encoded-words during header folding, splitting Base64 payloads with spaces.
-Standard `mime.WordDecoder` silently returns the input unchanged (no error)
-when it encounters this. Our parser detects undecoded `=?..?=` markers in
-the output and retries after stripping spaces from the Base64 payload.
-
-**Why not just strip all spaces from all headers?** That would break
-legitimate spaces in display names and other header fields.
+The input is read up to mailparse's `DefaultMaxSize` (64 MiB) plus one byte, so a larger file is
+refused with `ErrTooLarge` instead of being parsed cut.
 
 ---
 
@@ -122,7 +121,15 @@ Indicators are classified as **strong** or **weak** signals.
 
 ### Authentication (auth.go)
 
-Parses the `Authentication-Results` header for SPF, DKIM, and DMARC verdicts.
+Reads SPF, DKIM, and DMARC verdicts from the **top** `Authentication-Results` field, the first
+result of each mechanism in it. Each receiving server adds its field above those already there, so
+the top one is the recipient's own server's, and a field the sender forged sits below it.
+
+Every field is kept in `authentication.raw` and given to the LLM inside the untrusted-data tags.
+`authentication.conflicting` is set when a lower field gives a mechanism a different result than the
+top one. Forwarding does this honestly — in our sample of 12 real messages, 10 carried several fields
+and all 10 disagreed (the first receiver passed SPF, the forwarding target failed it) — so it is
+information only: it changes no verdict and counts as no signal.
 
 **Why weak signals?** SPF and DMARC frequently fail for legitimate email due
 to forwarding (Gmail → another account), mailing list relays, and third-party
@@ -142,6 +149,11 @@ judgment only when combined with at least one strong signal.
 | Display name contains email address | Strong | Attackers embed fake email addresses in display names to trick recipients |
 | Reply-To domain divergence | Strong | Redirecting replies to an attacker-controlled address |
 
+**Every combination**: the checks run over every From, Return-Path and Reply-To mailbox (a message
+can carry several), and a check fires when any one combination fires. Adding a mailbox can raise a
+flag but never clear one, so a second From cannot hide the first. Domains come from
+`Mailbox.Address` and display names from `Mailbox.Name`, never from re-parsing a display string.
+
 **Subdomain matching**: `bounce.mag.subaru.jp` is considered related to
 `mag.subaru.jp`. Legitimate senders often use subdomains for bounce handling,
 and flagging these creates false positives.
@@ -153,7 +165,11 @@ without the complexity.
 ### URL analysis (url.go)
 
 URLs are extracted from both `href` attributes and text content, deduplicated,
-and classified:
+and classified. The outer bodies are searched first, then the bodies of attached messages (a
+forwarded phishing report) and the text/* attachments of every layer (a calendar invitation's link
+is a URL like any other). A URL is reported once, where it was first found: `layer` names the
+attached message (a `Message.Walk` path such as `2` or `2>1`) and `attachment` the text attachment.
+The LLM is told where each suspicious URL was found; it is shown the outer body only.
 
 | Pattern | Signal | Examples |
 |---------|:---:|---------|
@@ -183,6 +199,8 @@ before analysis to avoid noise.
 | Dangerous file extension | Strong | `.exe`, `.scr`, `.bat`, `.vbs`, `.ps1`, `.iso`, `.lnk` |
 | Macro-enabled Office | Strong | `.xlsm`, `.docm`, `.pptm` |
 | Double extension | Strong | `invoice.pdf.exe` |
+
+Attachments of attached messages are checked too, with their `layer`.
 
 **Why no content inspection?** The analyzer processes email metadata and
 structure, not binary payloads. Content inspection (sandboxing, AV scanning)
@@ -307,8 +325,11 @@ goods, `bec` for invoice fraud).
 
 | Decision | Rationale |
 |----------|-----------|
-| Go (not Python) | Single binary, fast startup, parsers from eml-to-jsonl/msg-to-jsonl reusable directly |
+| Go (not Python) | Single binary, fast startup, the organization's Go mail parser (mailparse) |
 | Internal parsers (not external CLI) | Single binary deployment, access to attachment bytes for hashing, access to Return-Path/Reply-To/Authentication-Results |
+| mailparse for all parsing | One parser for the four mail tools, written for attacker-composed mail; no community package (the .msg reader replaced `richardlehane/mscfb`) |
+| Top Authentication-Results decides | The recipient's server adds the top field; forged fields sit below it. Disagreement is common in honest forwarded mail, so it is reported, not judged |
+| Sender checks over every mailbox | A duplicated From or Reply-To is an attack shape; any-combination checks cannot be defeated by adding mailboxes |
 | SHA-256 only (not MD5/SHA-1) | MD5 and SHA-1 have known collision attacks; SHA-256 is the standard for IoC correlation (STIX 2.1, VirusTotal) |
 | google.golang.org/genai SDK | vertexai/genai deprecated June 2025; genai is the active replacement |
 | Prompt injection defense at prompt top | LLMs attend more to early instructions; placing defense after long rules risks deprioritization |

@@ -7,12 +7,28 @@ URL/添付ファイルリスク評価、LLMによるコンテンツ分析を含�
 ## 機能
 
 - **デュアル分析エンジン**: 確定的ルールベース + Gemini LLMコンテンツ分析
-- **EML/MSG両対応**: 全charset対応（ISO-2022-JP, Shift_JIS, EUC-JP等）
+- **EML・MSG・winmail.dat**: 組織のメールパーサー [mailparse](https://github.com/nlink-jp/mailparse)（攻撃者が
+  作ったメールを前提に書かれている）で読む。形式は中身で判別。全charset対応（ISO-2022-JP, Shift_JIS, EUC-JP等）
 - **SHA-256ハッシュ**: ファイル・添付ファイル個別のハッシュ（IoC突合用）
-- **認証分析**: SPF, DKIM, DMARC結果のパース
-- **送信者整合性**: From/Return-Path不一致、Display Name偽装、Reply-To乖離
-- **URL分析**: 抽出、デファング、フリーホスティング/短縮URL/不審TLD検出
-- **添付ファイル分析**: 危険拡張子、マクロ付きOffice、二重拡張子
+- **認証分析**: SPF, DKIM, DMARC はいちばん上の Authentication-Results（受信者のサーバーのもの）から。
+  すべての欄を生のまま残し、下の欄が食い違えば `conflicting` で知らせる
+- **送信者整合性**: From/Return-Path不一致、Display Name偽装、Reply-To乖離。すべての mailbox で判定するので、
+  2 つ目の From で 1 つ目を隠せない
+- **URL分析**: 抽出、デファング、フリーホスティング/短縮URL/不審TLD検出。本文、添付された（転送された）メール、
+  カレンダーの招待などの text の添付から
+- **添付ファイル分析**: 危険拡張子、マクロ付きOffice、二重拡張子。添付されたメールの中も
+- **パーサーの警告**: 解析が処理したこと（重複したヘッダー、壊れたアドレス、壊れた符号化）を `warnings` に。
+  LLM には警告のコードを渡す
+
+出力（JSON）について:
+
+- `from` はすべての From の mailbox を `, ` で連ねる。atom だけでない表示名は引用符で囲むので、復号するとアドレスに
+  なる表示名も表示名のまま
+- URL と添付の `layer` は、それが見つかった添付されたメールを mailparse の `Message.Walk` の path（`2`、`2>1`）で示す。
+  外側のメールなら無い。URL の `attachment` は、それが見つかった text の添付の名前
+- `authentication.raw` にすべての Authentication-Results、`authentication.conflicting` は知らせるだけ（正当な転送でも立つ）
+- `warnings` はメールと添付されたすべてのメールの mailparse の警告（安定したコード、mailparse の README を見よ）。常に配列
+- 64 MiB を超えるファイルは断る
 - **ルーティング分析**: X-Mailer分類、不審なReceivedヘッダー検出
 - **オフラインモード**: LLMなしのルールベース分析（API呼び出しなし）
 - **プロンプトインジェクション防御**: ノンスタグXMLラッピング（防御指示をプロンプト冒頭に配置）

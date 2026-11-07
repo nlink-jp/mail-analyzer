@@ -126,3 +126,27 @@ func TestParseJudgmentConfidenceClamp(t *testing.T) {
 		t.Errorf("Confidence should be clamped to 1.0, got %f", j.Confidence)
 	}
 }
+
+// The raw Authentication-Results go inside the untrusted-data tags; the
+// parser's warning codes and where a URL was found go with the indicators.
+func TestBuildUserPromptAuthWarningsLayers(t *testing.T) {
+	email := &parser.Email{Subject: "s", Body: []parser.BodyPart{{Type: "text/plain", Content: "b"}}}
+	indicators := &indicator.Indicators{
+		Authentication: indicator.AuthResult{SPF: "fail", DKIM: "none", DMARC: "none", Conflicting: true,
+			Raw: []string{"mx.example.com; spf=fail", "forged.example; spf=pass"}},
+		URLs:         []indicator.URLResult{{URL: "hxxps://bit[.]ly/x", Suspicious: true, Reason: "URL shortener", Layer: "2"}},
+		WarningCodes: []string{"duplicate_field"},
+	}
+	prompt := BuildUserPrompt(email, indicators)
+	open := strings.Index(prompt, "<user-data-")
+	if open < 0 {
+		t.Fatal("no data tag")
+	}
+	head, data := prompt[:open], prompt[open:]
+	if !strings.Contains(data, "Authentication-Results: forged.example; spf=pass\n") || !strings.Contains(data, "Authentication-Results: mx.example.com; spf=fail\n") {
+		t.Errorf("raw auth not inside the data tags:\n%s", data)
+	}
+	if !strings.Contains(head, "SPF: fail") || !strings.Contains(head, "NOTE: a lower Authentication-Results header disagrees") || !strings.Contains(head, "Parser warnings: duplicate_field") || !strings.Contains(head, "URL shortener, in attached message 2") {
+		t.Errorf("indicators:\n%s", head)
+	}
+}

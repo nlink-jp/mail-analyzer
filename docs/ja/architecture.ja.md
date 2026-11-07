@@ -80,33 +80,33 @@ mail-analyzer は 3 つの中心的な原則に従う:
 
 ## パーサーの設計
 
-### なぜ内部パーサーなのか（外部ツールではなく）
+### mailparse
 
-初代の mail-analyzer は外部 CLI ツールとして `eml-to-jsonl` と `msg-to-jsonl` に依存していた。
-これは配布の複雑さとバージョンの結合を生んだ。v2 は次の理由からパーサーを内部化した:
+メールは組織のメールパーサー [mailparse](https://github.com/nlink-jp/mailparse) で読む（.eml、Outlook の .msg、
+winmail.dat。ファイル名ではなく中身で判別する）。攻撃者が作ったメールを前提に書かれており、ヘッダーの欄は順序と
+重複を保ち、アドレスは表示名の復号より先に解析し、壊れたもの・直したもの・上限で切ったものはすべて警告にする。
+eml-to-jsonl、msg-to-jsonl、mail-analyzer-local も同じパーサーで読む。
 
-- **単一バイナリでの配布**: 実行時に外部依存が無い
-- **添付のバイナリへのアクセス**: 外部ツールはメタデータしか出力しないが、SHA-256 ハッシュを
-  計算するには生のバイトが必要である
-- **ヘッダーへのアクセス**: Return-Path、Reply-To、Authentication-Results、X-Mailer が必要で、
-  外部ツールはこれらを露出していなかった
+`internal/parser` は自前の解析を持たない。`mailparse.Message` を、判定とプロンプトが読む `Email` に写すだけで、
+**mail-analyzer と mail-analyzer-local で同一**である:
 
-### 文字コードの扱い
+| Email | mailparse から |
+|---|---|
+| `From`・`ReplyTo`（表示用） | すべての mailbox を `Mailbox.String()` にして `, ` で連ねる |
+| `FromMailboxes`・`ReturnPathMailboxes`・`ReplyToMailboxes` | 差出人の判定が読む、型つきの mailbox |
+| `To`・`CC`・`BCC` | すべての出現のすべての mailbox を `Mailbox.String()` で |
+| `AuthResults`・`Received` | すべての欄の `Field.Collapsed()`、上から順に |
+| `Body` | 外側のメールの本文（RTF の写しは他の本文が無いときだけ） |
+| `Attachments` | 全層の添付。SHA-256 と層（`Message.Walk` の path）つき |
+| `Texts` | URL を探す追加の文字列: 入れ子のメールの本文、text/* の添付（`Attachment.Text()`） |
+| `Warnings` | `Message.AllWarnings()` |
 
-電子メールはレガシーな文字エンコーディングの最後の砦の 1 つである。日本語のメールは
-ISO-2022-JP、Shift_JIS、EUC-JP を頻繁に使う。パーサーは文字コード変換に
-`golang.org/x/text/encoding/htmlindex` を用い、IANA に登録されたすべての文字コードをカバーする。
+**なぜ `Mailbox.String()` だけなのか？** 復号した表示名とアドレスを自分でつなぐと、パーサーが防いだ偽装が戻る。
+復号すると `Bank <security@bank.example>` になる表示名がアドレスに見えてしまう。`Mailbox.String()` はそうした
+表示名を引用符で囲む。判定は型つきの mailbox を読み、表示用の文字列を読み直さない。
 
-### RFC 2047 の壊れた encoded-word の修復
-
-一部の MUA（メールユーザーエージェント）と MTA は、ヘッダーの折り返しの際に RFC 2047 の
-encoded-word の内部に改行を挿入し、Base64 のペイロードを空白で分断する。標準の
-`mime.WordDecoder` はこれに出会うと、（エラーを返さずに）黙って入力をそのまま返す。本パーサーは
-出力にデコードされていない `=?..?=` のマーカーがあることを検出し、Base64 ペイロードから空白を
-取り除いて再試行する。
-
-**なぜ全ヘッダーから空白をすべて取り除かないのか？** それでは表示名やその他のヘッダー
-フィールドの正当な空白が壊れてしまう。
+入力は mailparse の `DefaultMaxSize`（64 MiB）＋1 バイトまで読む。それより大きいファイルは、切れたまま解析せずに
+`ErrTooLarge` で断る。
 
 ---
 
@@ -117,7 +117,14 @@ encoded-word の内部に改行を挿入し、Base64 のペイロードを空白
 
 ### 認証 (auth.go)
 
-`Authentication-Results` ヘッダーを SPF、DKIM、DMARC の判定結果についてパースする。
+SPF、DKIM、DMARC の結果は、**いちばん上**の `Authentication-Results` の欄から、機構ごとに最初の結果を読む。
+受信サーバーは自分の欄を既にある欄の上へ足すので、いちばん上は受信者自身のサーバーの欄で、送信者が偽造した欄は
+その下に来る。
+
+すべての欄は `authentication.raw` に残し、LLM には信頼できないデータの枠の中で渡す。下の欄が、ある機構について
+いちばん上と違う結果を書いていれば `authentication.conflicting` を立てる。転送は正当にこれを起こす（本物の 12 通の
+うち 10 通に欄が複数あり、10 通とも食い違った。最初の受信は SPF を通し、転送先は落とした）ので、知らせるだけで
+判定は変えず、シグナルにも数えない。
 
 **なぜ weak シグナルなのか？** SPF と DMARC は、転送（Gmail → 別のアカウント）、メーリング
 リストのリレー、サードパーティのマーケティングプラットフォーム（Salesforce Marketing Cloud、
@@ -136,6 +143,10 @@ SendGrid）のために、正当なメールでも頻繁に失敗する。E2E �
 | 表示名がメールアドレスを含む | Strong | 攻撃者は受信者を騙すために表示名に偽のメールアドレスを埋め込む |
 | Reply-To のドメインの乖離 | Strong | 返信を攻撃者の管理するアドレスへ向ける |
 
+**すべての組み合わせ**: 判定はすべての From・Return-Path・Reply-To の mailbox で行い（1 通に複数あり得る）、どれか
+1 組で成り立てば旗を立てる。mailbox を足しても旗は消えないので、2 つ目の From で 1 つ目を隠せない。ドメインは
+`Mailbox.Address`、表示名は `Mailbox.Name` から取り、表示用の文字列を読み直さない。
+
 **サブドメインのマッチング**: `bounce.mag.subaru.jp` は `mag.subaru.jp` と関連するものとみなす。
 正当な送信者はバウンス処理にサブドメインを使うことが多く、これらにフラグを立てると偽陽性を生む。
 
@@ -143,6 +154,11 @@ SendGrid）のために、正当なメールでも頻繁に失敗する。E2E �
 サブドメインのサフィックスマッチングは、その複雑さなしに最も一般的なケースをカバーする。
 
 ### URL 解析 (url.go)
+
+外側の本文を先に探し、次に添付されたメール（転送された不審メールの報告）の本文と、全層の text/* の添付（カレンダーの
+招待の中のリンクも URL）を探す。URL は最初に見つかった場所で 1 回だけ出し、`layer` に添付されたメール（`2` や `2>1`
+のような `Message.Walk` の path）、`attachment` に text の添付の名前を付ける。LLM には不審な URL がどこで見つかったかを
+伝え、本文は外側のものだけを見せる。
 
 URL は `href` 属性とテキスト本文の両方から抽出され、重複を除いて分類される:
 
@@ -172,6 +188,8 @@ HTML メールに現れるが、クリックできるものではない。ノイ
 | 危険なファイル拡張子 | Strong | `.exe`、`.scr`、`.bat`、`.vbs`、`.ps1`、`.iso`、`.lnk` |
 | マクロ有効の Office | Strong | `.xlsm`、`.docm`、`.pptm` |
 | 二重拡張子 | Strong | `invoice.pdf.exe` |
+
+添付されたメールの添付も、`layer` つきで判定する。
 
 **なぜ内容を検査しないのか？** このアナライザーが処理するのはメールのメタデータと構造であり、
 バイナリのペイロードではない。内容の検査（サンドボックス、AV スキャン）は別のツールの責務で
@@ -288,8 +306,11 @@ API のエラー（429、500、503）は指数バックオフ（基準 5s、上�
 
 | Decision | Rationale |
 |----------|-----------|
-| Python ではなく Go | 単一バイナリ、起動が速い、eml-to-jsonl/msg-to-jsonl のパーサーをそのまま再利用できる |
+| Python ではなく Go | 単一バイナリ、起動が速い、組織の Go のメールパーサー（mailparse） |
 | 外部 CLI ではなく内部パーサー | 単一バイナリでの配布、ハッシュ計算のための添付バイトへのアクセス、Return-Path/Reply-To/Authentication-Results へのアクセス |
+| 解析はすべて mailparse | 4 つのメールツールで 1 つのパーサー、攻撃者が作ったメールを前提に書かれている。コミュニティ製のパッケージを使わない（.msg の読み取りは `richardlehane/mscfb` を置き換えた） |
+| Authentication-Results はいちばん上で判定 | いちばん上は受信者のサーバーが足した欄で、偽造した欄はその下に来る。正当な転送でも食い違いはよくあるので、判定せず知らせる |
+| 差出人の判定はすべての mailbox で | From や Reply-To の重複は攻撃の形。どれか 1 組で成り立つ判定は、mailbox を足しても逃れられない |
 | MD5/SHA-1 ではなく SHA-256 のみ | MD5 と SHA-1 には既知の衝突攻撃がある。SHA-256 は IoC の突き合わせの標準である（STIX 2.1、VirusTotal） |
 | google.golang.org/genai SDK | vertexai/genai は 2025 年 6 月に非推奨。genai が現役の後継である |
 | プロンプト先頭のインジェクション対策 | LLM は早い位置の指示により注意を払う。長い規則の後に対策を置くと優先度が下げられる危険がある |

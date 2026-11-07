@@ -15,6 +15,7 @@ type AttachResult struct {
 	Hash       string `json:"hash,omitempty"`
 	Suspicious bool   `json:"suspicious"`
 	Reason     string `json:"reason,omitempty"`
+	Layer      string `json:"layer,omitempty"` // nested message holding it (mailparse Walk path); empty for the outer message
 }
 
 // Dangerous file extensions commonly used in malware delivery.
@@ -42,6 +43,7 @@ func analyzeAttachments(email *parser.Email) []AttachResult {
 			MIMEType: a.MIMEType,
 			Size:     a.Size,
 			Hash:     a.Hash,
+			Layer:    a.Layer,
 		}
 
 		ext := strings.ToLower(filepath.Ext(a.Filename))

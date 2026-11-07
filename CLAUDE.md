@@ -17,7 +17,7 @@ go test ./...    # Same without Makefile
 
 ```
 internal/
-├── parser/      # EML/MSG parsing (from eml-to-jsonl + msg-to-jsonl)
+├── parser/      # mailparse.Message → Email (same code in mail-analyzer-local)
 ├── indicator/   # Rule-based analysis (auth, sender, url, attachment, routing)
 ├── llm/         # Gemini LLM (google.golang.org/genai, prompt injection defense)
 ├── analyzer/    # Composite analysis (indicators + LLM → judgment)

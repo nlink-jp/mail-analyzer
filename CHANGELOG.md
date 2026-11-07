@@ -7,11 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Reverted
+The move to mailparse is redone, together with mail-analyzer-local, eml-to-jsonl and msg-to-jsonl,
+so the four read mail the same way. v0.5.0 and v0.6.0 moved this tool alone; the changes below are
+against v0.4.0, and the differences from v0.6.0 follow them.
 
-- The move to nlink-jp/mailparse (v0.5.0 and v0.6.0) is undone: the code is
-  back to v0.4.0's. Four tools were moved separately and came out
-  inconsistent; the move will be redone for all of them together.
+### Changed
+
+- **The message is read by [mailparse](https://github.com/nlink-jp/mailparse) v0.2.0** instead of
+  the in-tool parsers (`net/mail` and an `.msg` reader on the community package
+  `richardlehane/mscfb`, which is no longer a dependency). mail-analyzer and mail-analyzer-local
+  share the parser and indicator code, and eml-to-jsonl and msg-to-jsonl read mail the same way.
+  - The format is recognized by content (`.eml`, `.msg`, `winmail.dat`), not by the file extension.
+  - `from` lists every From mailbox; display names that are not plain atoms are quoted
+    (`Mailbox.String()`), so a name that decodes to an address stays a name.
+  - A `.msg` gets its `date`, its Authentication-Results and its Bcc recipients (which were missing
+    or listed under To); files larger than 64 MiB are refused.
+- **Authentication: the top Authentication-Results decides** (the recipient's own server adds it;
+  a forged field sits below). Every field is kept in `authentication.raw` and given to the LLM
+  inside the untrusted-data tags; `authentication.conflicting` flags a lower field that disagrees.
+  It is information only: in 12 real messages, 10 carried several fields and all 10 disagreed
+  through honest forwarding.
+- **Sender checks run over every From, Return-Path and Reply-To mailbox**: a check fires when any
+  combination fires, so a second From or Reply-To cannot hide the first. Domains and display names
+  come from the parsed mailboxes, not from re-parsing a display string.
+- **Attached (forwarded) messages are searched**: their URLs and attachments are checked and carry
+  `layer` (a mailparse `Message.Walk` path). Sender and authentication checks stay on the outer
+  message, and the LLM sees the outer body only.
+- **URLs in text/* attachments** (a calendar invitation, say) are checked and carry `attachment`.
+- An attachment without a name has an empty `filename` (it was `"attachment"`), and a text part
+  other than text/plain and text/html (an inline text/calendar, say) is an attachment, no longer a
+  body: it appears in `indicators.attachments`, and its URLs carry `attachment`.
+
+### Added
+
+- `warnings` in the result: mailparse's warnings for the message and every attached message,
+  always an array. The LLM is given the warning codes (no message text).
+
+### Compared with v0.6.0
+
+- Authentication verdicts come from the top field; v0.6.0 merged every field and kept the most
+  severe verdict, so a lower field's failure (common in honest forwarded mail) overrode the top
+  field's pass.
+- Attached messages are not a separate `nested` list: their URLs and attachments join the outer
+  ones, marked with `layer`.
+- **The parser warnings key is renamed `parse_warnings` → `warnings`**, and it is always an array
+  (`parse_warnings` was omitted when empty). A reader of v0.6.0's output must read the new key.
+- `authentication.raw` (every field) replaces `authentication.per_header` (verdicts per field).
 
 ## [0.6.0] - 2026-11-07
 

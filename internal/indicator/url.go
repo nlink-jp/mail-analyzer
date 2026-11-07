@@ -12,6 +12,12 @@ type URLResult struct {
 	URL        string `json:"url"`
 	Suspicious bool   `json:"suspicious"`
 	Reason     string `json:"reason,omitempty"`
+	// Layer is the nested message the URL was first found in (a mailparse
+	// Walk path such as "2" or "2>1"); empty for the outer message.
+	Layer string `json:"layer,omitempty"`
+	// Attachment is the text/* attachment the URL was first found in
+	// (a calendar invitation, say); empty for a body.
+	Attachment string `json:"attachment,omitempty"`
 }
 
 var (
@@ -61,13 +67,21 @@ var suspiciousTLDs = map[string]bool{
 	".rest": true, ".monster": true, ".sbs": true, ".cyou": true,
 }
 
+// analyzeURLs searches the outer bodies first, then the bodies of nested
+// messages and the text/* attachments of every layer. A URL is reported once,
+// where it was first found.
 func analyzeURLs(email *parser.Email) []URLResult {
 	seen := map[string]bool{}
 	var results []URLResult
 
+	texts := make([]parser.Text, 0, len(email.Body)+len(email.Texts))
 	for _, bp := range email.Body {
-		urls := extractURLs(bp.Content)
-		for _, u := range urls {
+		texts = append(texts, parser.Text{Content: bp.Content})
+	}
+	texts = append(texts, email.Texts...)
+
+	for _, t := range texts {
+		for _, u := range extractURLs(t.Content) {
 			if seen[u] {
 				continue
 			}
@@ -78,7 +92,7 @@ func analyzeURLs(email *parser.Email) []URLResult {
 				continue
 			}
 
-			result := URLResult{URL: defangURL(u)}
+			result := URLResult{URL: defangURL(u), Layer: t.Layer, Attachment: t.Attachment}
 			domain := extractURLDomain(u)
 
 			switch {

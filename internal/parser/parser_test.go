@@ -41,11 +41,11 @@ func TestParseSuspiciousEML(t *testing.T) {
 	if email.Subject != "Urgent: Your Account Will Be Suspended" {
 		t.Errorf("Subject = %q", email.Subject)
 	}
-	if email.ReturnPath != "<bounce@malicious-domain.com>" {
+	if email.ReturnPath != "bounce@malicious-domain.com" {
 		t.Errorf("ReturnPath = %q", email.ReturnPath)
 	}
-	if email.AuthResults == "" {
-		t.Error("AuthResults should not be empty")
+	if len(email.AuthResults) != 1 {
+		t.Errorf("AuthResults = %q", email.AuthResults)
 	}
 }
 
@@ -68,32 +68,6 @@ func TestParseAttachmentEML(t *testing.T) {
 	}
 	if att.Size == 0 {
 		t.Error("Attachment size should not be 0")
-	}
-}
-
-func TestParseUnsupportedExtension(t *testing.T) {
-	_, err := ParseBytes([]byte("data"), "test.txt")
-	if err == nil {
-		t.Error("expected error for unsupported extension")
-	}
-}
-
-func TestParseReaderAsEML(t *testing.T) {
-	f, err := os.Open("../../testdata/simple.eml")
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer f.Close()
-
-	email, err := ParseReader(f, "stdin")
-	if err != nil {
-		t.Fatalf("ParseReader: %v", err)
-	}
-	if email.Subject != "Meeting Tomorrow" {
-		t.Errorf("Subject = %q", email.Subject)
-	}
-	if email.Source != "stdin" {
-		t.Errorf("Source = %q, want 'stdin'", email.Source)
 	}
 }
 

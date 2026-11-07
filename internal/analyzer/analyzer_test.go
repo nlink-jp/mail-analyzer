@@ -60,3 +60,39 @@ func TestAnalyzeOfflineWithAttachment(t *testing.T) {
 		t.Error("email with clean PDF should not be suspicious")
 	}
 }
+
+// The verdicts come from the top Authentication-Results (the receiving
+// server's own); a forged one below only raises the conflicting flag, and the
+// parser's warnings reach the result.
+func TestAnalyzeOfflineForgedAuthResults(t *testing.T) {
+	raw := "Authentication-Results: mx.example.com; spf=fail dkim=none dmarc=fail\r\n" +
+		"Return-Path: <x@evil.example>\r\n" +
+		"Authentication-Results: forged.example; spf=pass dkim=pass dmarc=pass\r\n" +
+		"From: CEO <ceo@example.com>\r\nFrom: x@evil.example\r\nTo: a@example.com\r\nSubject: pay\r\nMessage-ID: <1@evil.example>\r\n\r\nwire money\r\n"
+	email, err := parser.ParseBytes([]byte(raw), "t.eml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := AnalyzeOffline(email)
+	auth := result.Indicators.Authentication
+	if !auth.Conflicting || auth.SPF != "fail" || auth.DMARC != "fail" || len(auth.Raw) != 2 {
+		t.Fatalf("auth = %+v", auth)
+	}
+	if !result.Indicators.Sender.FromReturnPathMismatch || !result.Judgment.IsSuspicious {
+		t.Fatalf("result = %+v", result.Judgment)
+	}
+	if len(result.Warnings) == 0 || result.Warnings[0].Code != "duplicate_field" {
+		t.Fatalf("warnings = %+v", result.Warnings)
+	}
+}
+
+// warnings is always an array in the JSON, never null.
+func TestWarningsAlwaysArray(t *testing.T) {
+	email, err := parser.ParseFile("../../testdata/simple.eml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if AnalyzeOffline(email).Warnings == nil {
+		t.Fatal("Warnings is nil")
+	}
+}
