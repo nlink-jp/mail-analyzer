@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-11-07
+
+### Changed
+
+- **mailparse v0.2.0.** The helpers v0.5.0 kept around mailparse v0.1.0 are gone in favour of mailparse's own:
+  `Mailbox.String`, `Message.AllWarnings`, `Body.Origin`, `Field.Collapsed` and its 64 MiB default size limit.
+- **Display names are quoted by RFC 5322**: a name that is not plain words — one holding `.` or `(` as well as
+  `<`, `@`, `,` or a quote — is quoted (`"J. Smith" <j@example.com>`); v0.5.0 quoted only the last group. On 12
+  real messages this changed the `from` of 3 and nothing else.
+- **An inline text/calendar (or other text/*) part is converted to UTF-8** by its declared charset, a byte order
+  mark or a guess, like the bodies; it was read as raw bytes.
+
+### Fixed
+
+- **A UTF-8 byte order mark before an `.eml`'s header no longer hides the first field**: it swallowed the From
+  (or whatever came first) as a malformed line, leaving the sender rules nothing to read. It is now reported as
+  `leading_bom`.
+- From mailparse v0.2.0: a `.msg` with internet headers also reads its recipient table — Bcc comes from it
+  (`bcc_from_mapi`) and a disagreement is reported (`mapi_header_mismatch`); the lenient address reading no
+  longer takes a `<` or `@` inside a quoted name or a comment for an address; a byte order mark decides a text's
+  charset, so UTF-16 HTML in a `.msg` is no longer garbled.
+
 ## [0.5.0] - 2026-11-07
 
 ### Changed
