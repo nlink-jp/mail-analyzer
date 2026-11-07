@@ -3,7 +3,7 @@ module github.com/nlink-jp/mail-analyzer
 go 1.26.1
 
 require (
-	github.com/nlink-jp/mailparse v0.2.0
+	github.com/nlink-jp/mailparse v0.3.0
 	github.com/nlink-jp/toml v0.1.1
 	google.golang.org/genai v1.70.0
 )

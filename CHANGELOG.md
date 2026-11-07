@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **mailparse v0.3.0.** An address field that does not parse as RFC 5322 is
+  now read by a lexer and a small grammar: every address in it is kept (a
+  missing comma no longer drops one), and none is made up from a comment, a
+  quoted display name or words glued together. A crafted .msg whose compressed
+  RTF nests `\field` groups no longer panics, and unclosed parentheses in an
+  address field no longer take quadratic time. Well-formed mail reads as
+  before (18 real messages compared, no difference).
+
 ## [0.7.0] - 2026-11-07
 
 The move to mailparse is redone, together with mail-analyzer-local, eml-to-jsonl and msg-to-jsonl,

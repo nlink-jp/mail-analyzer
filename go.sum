@@ -29,8 +29,8 @@ github.com/googleapis/gax-go/v2 v2.19.0 h1:fYQaUOiGwll0cGj7jmHT/0nPlcrZDFPrZRhTs
 github.com/googleapis/gax-go/v2 v2.19.0/go.mod h1:w2ROXVdfGEVFXzmlciUU4EdjHgWvB5h2n6x/8XSTTJA=
 github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
-github.com/nlink-jp/mailparse v0.2.0 h1:4KzwIdMkwZpZqPshBxZHC504DI1jVWlfjwWCYs5Km90=
-github.com/nlink-jp/mailparse v0.2.0/go.mod h1:rlv1mP9iSw2LSTYEc/BCqdn2fwYwfnnjyUqWTBWnQtc=
+github.com/nlink-jp/mailparse v0.3.0 h1:ppiYHGWToabO9q/4M/RBiDHtGGe0FkMJVHZrsMfpV3M=
+github.com/nlink-jp/mailparse v0.3.0/go.mod h1:rlv1mP9iSw2LSTYEc/BCqdn2fwYwfnnjyUqWTBWnQtc=
 github.com/nlink-jp/toml v0.1.1 h1:zxmLkY1muUMABHCJlwI5wI4RQFOFVo/6Ut223/X4L8M=
 github.com/nlink-jp/toml v0.1.1/go.mod h1:dzbdZU7YAqs6r72Cz0bxRLCapcdZor68Mo5cPVZ2U30=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
