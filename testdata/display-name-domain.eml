@@ -1,0 +1,11 @@
+Authentication-Results: mx.example.org; spf=pass smtp.mailfrom=unrelated.example; dkim=pass header.d=unrelated.example; dmarc=pass header.from=unrelated.example
+Return-Path: <random@unrelated.example>
+From: "shop.example.jp" <random@unrelated.example>
+To: recipient@example.org
+Subject: Your order
+Date: Sun, 8 Nov 2026 10:00:00 +0900
+Message-ID: <display-name-domain@unrelated.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Thank you for your order.

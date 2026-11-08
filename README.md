@@ -14,7 +14,8 @@ and LLM-powered content analysis.
 - **SHA-256 hashes**: file hash and per-attachment hashes for IoC correlation
 - **Authentication analysis**: SPF, DKIM, DMARC from the top Authentication-Results (the
   recipient's server's); every field kept raw, and a disagreeing lower field flagged as `conflicting`
-- **Sender integrity**: From/Return-Path mismatch, display name spoofing, Reply-To divergence —
+- **Sender integrity**: From/Return-Path mismatch, display name spoofing (a name that shows an email
+  address, or that is the domain of another organization than the address), Reply-To divergence —
   checked over every mailbox, so a second From cannot hide the first
 - **URL analysis**: extraction, defanging, free hosting / shortener / suspicious TLD detection, in
   the bodies, in attached (forwarded) messages and in text attachments such as calendar invitations

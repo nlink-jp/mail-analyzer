@@ -62,6 +62,18 @@ func TestBuildUserPrompt(t *testing.T) {
 	}
 }
 
+// The alert must not claim an email address when the name is a domain.
+func TestBuildUserPromptDisplayNameSpoofing(t *testing.T) {
+	email := &parser.Email{Subject: "s", From: "f"}
+	indicators := &indicator.Indicators{Sender: indicator.SenderResult{DisplayNameSpoofing: true}}
+
+	prompt := BuildUserPrompt(email, indicators)
+
+	if !strings.Contains(prompt, "ALERT: Display name shows an email address or the domain of another organization") {
+		t.Errorf("user prompt lacks the display name alert:\n%s", prompt)
+	}
+}
+
 func TestBuildUserPromptTruncation(t *testing.T) {
 	longBody := strings.Repeat("x", 5000)
 	email := &parser.Email{

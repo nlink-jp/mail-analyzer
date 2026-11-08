@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **`display_name_spoofing` also fires when the display name is the domain of another
+  organization** (#1), as in `"shop.example.jp" <random@unrelated.example>`. Such mail passes
+  authentication for the attacker's own domain, so nothing flagged it. The whole name must be a
+  domain by the Public Suffix List (`Node.js` and `co.jp` are not), and the registrable domains of
+  the name and the address are compared (`shop.example.jp` on `mail.example.jp` is one
+  organization). The offline judgment changes: this alone now gives `phishing` at confidence 0.25.
+  The alert to the LLM no longer says the name contains an email address when it does not.
+  `golang.org/x/net` becomes a direct dependency.
+
 ## [0.7.1] - 2026-11-07
 
 ### Fixed

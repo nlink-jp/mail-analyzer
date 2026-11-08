@@ -12,7 +12,8 @@ URL/添付ファイルリスク評価、LLMによるコンテンツ分析を含�
 - **SHA-256ハッシュ**: ファイル・添付ファイル個別のハッシュ（IoC突合用）
 - **認証分析**: SPF, DKIM, DMARC はいちばん上の Authentication-Results（受信者のサーバーのもの）から。
   すべての欄を生のまま残し、下の欄が食い違えば `conflicting` で知らせる
-- **送信者整合性**: From/Return-Path不一致、Display Name偽装、Reply-To乖離。すべての mailbox で判定するので、
+- **送信者整合性**: From/Return-Path不一致、Display Name偽装（メールアドレスを含む名前、またはアドレスとは別の組織の
+  ドメインである名前）、Reply-To乖離。すべての mailbox で判定するので、
   2 つ目の From で 1 つ目を隠せない
 - **URL分析**: 抽出、デファング、フリーホスティング/短縮URL/不審TLD検出。本文、添付された（転送された）メール、
   カレンダーの招待などの text の添付から

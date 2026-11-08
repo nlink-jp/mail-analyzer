@@ -138,7 +138,7 @@ func BuildUserPrompt(email *parser.Email, indicators *indicator.Indicators) stri
 		indicatorLines = append(indicatorLines, "ALERT: From/Return-Path domain mismatch")
 	}
 	if indicators.Sender.DisplayNameSpoofing {
-		indicatorLines = append(indicatorLines, "ALERT: Display name contains email address (possible spoofing)")
+		indicatorLines = append(indicatorLines, "ALERT: Display name shows an email address or the domain of another organization (possible spoofing)")
 	}
 	if indicators.Sender.ReplyToDivergence {
 		indicatorLines = append(indicatorLines, "ALERT: Reply-To domain differs from From domain")

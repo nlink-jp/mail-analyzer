@@ -47,6 +47,27 @@ func TestAnalyzeOfflineSuspicious(t *testing.T) {
 	}
 }
 
+// A display name that is another organization's domain is flagged even when
+// the sender's own domain passes every authentication check.
+func TestAnalyzeOfflineDomainInDisplayName(t *testing.T) {
+	email, err := parser.ParseFile("../../testdata/display-name-domain.eml")
+	if err != nil {
+		t.Fatalf("ParseFile: %v", err)
+	}
+
+	result := AnalyzeOffline(email)
+
+	if a := result.Indicators.Authentication; a.SPF != "pass" || a.DKIM != "pass" || a.DMARC != "pass" {
+		t.Fatalf("authentication = %+v, want all pass", a)
+	}
+	if !result.Indicators.Sender.DisplayNameSpoofing {
+		t.Errorf("DisplayNameSpoofing = false, details %q", result.Indicators.Sender.Details)
+	}
+	if !result.Judgment.IsSuspicious {
+		t.Errorf("Judgment = %+v, want suspicious", result.Judgment)
+	}
+}
+
 func TestAnalyzeOfflineWithAttachment(t *testing.T) {
 	email, err := parser.ParseFile("../../testdata/attachment.eml")
 	if err != nil {

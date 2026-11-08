@@ -5,6 +5,7 @@ import (
 
 	"github.com/nlink-jp/mail-analyzer/internal/parser"
 	"github.com/nlink-jp/mailparse"
+	"golang.org/x/net/publicsuffix"
 )
 
 // SenderResult holds sender integrity analysis.
@@ -51,12 +52,20 @@ mismatch:
 		}
 	}
 
-	// Display name spoofing: a display name that contains an email-like pattern.
+	// Display name spoofing: a display name that contains an email-like
+	// pattern, or that is a domain of another organization than the address.
 	for _, mb := range email.FromMailboxes {
 		if strings.Contains(mb.Name, "@") {
 			result.DisplayNameSpoofing = true
 			details = append(details, "Display name contains email address: "+mb.Name)
 			break
+		}
+		if shown := domainInDisplayName(mb.Name); shown != "" {
+			if actual := extractDomain(mb.Address); actual != "" && registrableDomain(shown) != registrableDomain(actual) {
+				result.DisplayNameSpoofing = true
+				details = append(details, "Display name is a domain ("+shown+") of another organization than the address domain ("+actual+")")
+				break
+			}
 		}
 	}
 
@@ -92,6 +101,59 @@ func containsFold(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// domainInDisplayName returns the lower-cased domain when the whole display
+// name is one, and "" otherwise. What counts as a domain is decided by the
+// Public Suffix List, so a name that merely has a dot in it (Node.js,
+// Taro.Yamada) is not one, and neither is a bare suffix (co.jp, github.io).
+func domainInDisplayName(name string) string {
+	d := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), "."))
+	if !isHostname(d) {
+		return ""
+	}
+	suffix, icann := publicsuffix.PublicSuffix(d)
+	// Neither ICANN-managed nor a dotted private suffix: the list's default
+	// rule answered, so the suffix is not a known one.
+	if !icann && !strings.Contains(suffix, ".") {
+		return ""
+	}
+	if _, err := publicsuffix.EffectiveTLDPlusOne(d); err != nil {
+		return ""
+	}
+	return d
+}
+
+// isHostname reports whether s is at least two labels of ASCII letters, digits
+// and hyphens, within the length limits of RFC 1035.
+func isHostname(s string) bool {
+	if len(s) > 253 {
+		return false
+	}
+	labels := strings.Split(s, ".")
+	if len(labels) < 2 {
+		return false
+	}
+	for _, l := range labels {
+		if l == "" || len(l) > 63 || l[0] == '-' || l[len(l)-1] == '-' {
+			return false
+		}
+		for _, c := range []byte(l) {
+			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// registrableDomain returns the part of d that one organization registers
+// (mail.example.co.jp → example.co.jp), or d itself when it has none.
+func registrableDomain(d string) string {
+	if r, err := publicsuffix.EffectiveTLDPlusOne(d); err == nil {
+		return r
+	}
+	return d
 }
 
 // domainsRelated returns true if two domains are the same or one is a

@@ -27,7 +27,7 @@ mail-analyzer/
 │   │   └── email.go             # Email model, ParseFile/ParseBytes, FromMessage, SHA-256
 │   ├── indicator/               # Rule-based analysis
 │   │   ├── auth.go              # SPF/DKIM/DMARC (top Authentication-Results), conflicting flag
-│   │   ├── sender.go            # From/Return-Path, spoofing (every mailbox)
+│   │   ├── sender.go            # From/Return-Path, display name spoofing (Public Suffix List), Reply-To (every mailbox)
 │   │   ├── url.go               # URL extraction, defang, classification (all layers, text attachments)
 │   │   ├── attachment.go        # Extension risk assessment
 │   │   ├── routing.go           # X-Mailer, Received headers

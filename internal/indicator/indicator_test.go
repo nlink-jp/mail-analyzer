@@ -81,6 +81,31 @@ func TestAnalyzeSender(t *testing.T) {
 		{"second reply-to cannot hide", []string{"alice@example.com"}, nil, []string{"alice@example.com", "x@evil.example"}, false, false, true},
 		// A name-only mailbox has no domain to compare.
 		{"name only", []string{"Someone|"}, []string{"bounce@other.example"}, nil, false, false, false},
+
+		// A display name that is a domain of another organization.
+		{"domain name, other address", []string{"shop.example.jp|random@unrelated.example"}, nil, nil, false, true, false},
+		{"domain name, case and trailing dot", []string{" Shop.Example.JP. |random@unrelated.example"}, nil, nil, false, true, false},
+		{"second from cannot hide domain name", []string{"a@example.jp", "shop.example.jp|x@unrelated.example"}, nil, nil, false, true, false},
+		{"private suffix, other tenant", []string{"a.github.io|x@b.github.io"}, nil, nil, false, true, false},
+		// The same organization, whichever side has the subdomain.
+		{"domain name, same domain", []string{"example.jp|info@example.jp"}, nil, nil, false, false, false},
+		{"domain name, address below", []string{"example.jp|info@mail.example.jp"}, nil, nil, false, false, false},
+		{"domain name, address above", []string{"shop.example.jp|info@example.jp"}, nil, nil, false, false, false},
+		{"domain name, sibling subdomain", []string{"shop.example.jp|info@mail.example.jp"}, nil, nil, false, false, false},
+		{"second-level suffix, same domain", []string{"Amazon.co.jp|x@mail.amazon.co.jp"}, nil, nil, false, false, false},
+		// Not a domain: no known suffix, a bare suffix, or more than a domain.
+		{"unknown suffix", []string{"Node.js|x@unrelated.example"}, nil, nil, false, false, false},
+		{"person name with dot", []string{"Taro.Yamada|x@unrelated.example"}, nil, nil, false, false, false},
+		{"version number", []string{"1.2.3|x@unrelated.example"}, nil, nil, false, false, false},
+		{"bare ICANN suffix", []string{"co.jp|x@unrelated.example"}, nil, nil, false, false, false},
+		{"bare private suffix", []string{"github.io|x@unrelated.example"}, nil, nil, false, false, false},
+		{"domain among words", []string{"shop.example.jp support|x@unrelated.example"}, nil, nil, false, false, false},
+		{"single label", []string{"Shop|x@unrelated.example"}, nil, nil, false, false, false},
+		{"empty label", []string{"shop..example.jp|x@unrelated.example"}, nil, nil, false, false, false},
+		{"leading hyphen", []string{"-shop.example.jp|x@unrelated.example"}, nil, nil, false, false, false},
+		{"space inside a label", []string{"Example Shop.jp|x@unrelated.example"}, nil, nil, false, false, false},
+		// Without an address there is nothing to compare the name to.
+		{"domain name, no address", []string{"shop.example.jp|"}, nil, nil, false, false, false},
 	}
 
 	for _, tt := range tests {

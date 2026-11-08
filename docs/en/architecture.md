@@ -147,12 +147,22 @@ judgment only when combined with at least one strong signal.
 |-------|:---:|------|
 | From ↔ Return-Path domain mismatch | Strong | Phishing emails almost always use a different Return-Path domain |
 | Display name contains email address | Strong | Attackers embed fake email addresses in display names to trick recipients |
+| Display name is the domain of another organization | Strong | `shop.example.jp` on an address elsewhere shows a brand the sender does not hold. Authentication passes for the attacker's own domain, so no other check sees it |
 | Reply-To domain divergence | Strong | Redirecting replies to an attacker-controlled address |
 
 **Every combination**: the checks run over every From, Return-Path and Reply-To mailbox (a message
 can carry several), and a check fires when any one combination fires. Adding a mailbox can raise a
 flag but never clear one, so a second From cannot hide the first. Domains come from
 `Mailbox.Address` and display names from `Mailbox.Name`, never from re-parsing a display string.
+
+**A domain as the display name**: the whole name, trimmed, must be an ASCII hostname with a suffix
+the Public Suffix List knows and a registrable domain below that suffix, so `Node.js`, `Taro.Yamada`
+and `co.jp` are not domains. The registrable domains of the name and the address are compared, so
+`shop.example.jp` on `mail.example.jp` is one organization, while two tenants of `github.io` are two.
+A name that is also a valid domain on a word-like TLD (`Sales.Team`, `Acme.Inc`) is flagged: this
+residue is accepted, because on its own the signal gives an offline confidence of 0.25 and the LLM
+reads the whole message. A brand name alone (it would need a list of brands) and a domain among
+other words are not covered.
 
 **Subdomain matching**: `bounce.mag.subaru.jp` is considered related to
 `mag.subaru.jp`. Legitimate senders often use subdomains for bounce handling,
@@ -334,6 +344,7 @@ goods, `bec` for invoice fraud).
 | google.golang.org/genai SDK | vertexai/genai deprecated June 2025; genai is the active replacement |
 | Prompt injection defense at prompt top | LLMs attend more to early instructions; placing defense after long rules risks deprioritization |
 | SPF/DMARC as weak signals | Real-world testing showed forwarded legitimate emails fail SPF/DMARC; strong signal requirement eliminates this false positive class |
+| Public Suffix List for a domain in the display name | What is a domain comes from an external, finite definition instead of "has a dot", which would match names such as Node.js. The list is built into the binary, so a new TLD needs a dependency update |
 | Subdomain matching for sender comparison | Legitimate bounce handling uses subdomains; exact domain comparison produces false positives |
 | Suspicious TLD list | Cheap TLDs (.cfd, .top, .xyz) are disproportionately used in phishing; flagging these caught 2 additional phishing emails in E2E testing |
 | Azure Blob Storage in free hosting list | 3 of 12 E2E test phishing emails used *.web.core.windows.net for credential harvesting pages |

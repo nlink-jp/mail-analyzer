@@ -5,6 +5,7 @@ go 1.26.1
 require (
 	github.com/nlink-jp/mailparse v0.3.0
 	github.com/nlink-jp/toml v0.1.1
+	golang.org/x/net v0.52.0
 	google.golang.org/genai v1.70.0
 )
 
@@ -27,7 +28,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.42.0 // indirect
 	go.opentelemetry.io/otel/trace v1.42.0 // indirect
 	golang.org/x/crypto v0.49.0 // indirect
-	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260319201613-d00831a3d3e7 // indirect
