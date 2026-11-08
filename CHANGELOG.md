@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`display_name_spoofing` also fires when the display name is the domain of another
   organization** (#1), as in `"shop.example.jp" <random@unrelated.example>`. Such mail passes
   authentication for the attacker's own domain, so nothing flagged it. The whole name must be a
-  domain by the Public Suffix List (`Node.js` and `co.jp` are not), and the registrable domains of
+  domain by the Public Suffix List (`Node.js` and `co.jp` are not), after the IDNA mapping, so
+  full-width forms, ideographic dots and invisible characters do not hide it. The registrable domains of
   the name and the address are compared (`shop.example.jp` on `mail.example.jp` is one
   organization). The offline judgment changes: this alone now gives `phishing` at confidence 0.25.
   The alert to the LLM no longer says the name contains an email address when it does not.

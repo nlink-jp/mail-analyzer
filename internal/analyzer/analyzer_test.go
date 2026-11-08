@@ -63,8 +63,8 @@ func TestAnalyzeOfflineDomainInDisplayName(t *testing.T) {
 	if !result.Indicators.Sender.DisplayNameSpoofing {
 		t.Errorf("DisplayNameSpoofing = false, details %q", result.Indicators.Sender.Details)
 	}
-	if !result.Judgment.IsSuspicious {
-		t.Errorf("Judgment = %+v, want suspicious", result.Judgment)
+	if !result.Judgment.IsSuspicious || result.Judgment.Category != "phishing" || result.Judgment.Confidence != 0.25 {
+		t.Errorf("Judgment = %+v, want suspicious phishing at 0.25", result.Judgment)
 	}
 }
 

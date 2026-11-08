@@ -5,6 +5,7 @@ import (
 
 	"github.com/nlink-jp/mail-analyzer/internal/parser"
 	"github.com/nlink-jp/mailparse"
+	"golang.org/x/net/idna"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -103,12 +104,25 @@ func containsFold(list []string, s string) bool {
 	return false
 }
 
-// domainInDisplayName returns the lower-cased domain when the whole display
-// name is one, and "" otherwise. What counts as a domain is decided by the
-// Public Suffix List, so a name that merely has a dot in it (Node.js,
-// Taro.Yamada) is not one, and neither is a bare suffix (co.jp, github.io).
+// asciiDomain returns s as a lookup would see it: lower-case A-labels without
+// a trailing dot, after the IDNA mapping (UTS #46) that folds full-width forms
+// and ideographic dots and drops invisible characters. It returns "" when IDNA
+// rejects s. A name that renders as a domain is compared as that domain.
+func asciiDomain(s string) string {
+	d, err := idna.Lookup.ToASCII(strings.TrimSpace(s))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSuffix(d, ".")
+}
+
+// domainInDisplayName returns the domain, in the form of asciiDomain, when the
+// whole display name is one, and "" otherwise. What counts as a domain is
+// decided by the Public Suffix List, so a name that merely has a dot in it
+// (Node.js, Taro.Yamada) is not one, and neither is a bare suffix (co.jp,
+// github.io).
 func domainInDisplayName(name string) string {
-	d := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), "."))
+	d := asciiDomain(name)
 	if !isHostname(d) {
 		return ""
 	}
@@ -150,6 +164,9 @@ func isHostname(s string) bool {
 // registrableDomain returns the part of d that one organization registers
 // (mail.example.co.jp → example.co.jp), or d itself when it has none.
 func registrableDomain(d string) string {
+	if a := asciiDomain(d); a != "" {
+		d = a
+	}
 	if r, err := publicsuffix.EffectiveTLDPlusOne(d); err == nil {
 		return r
 	}

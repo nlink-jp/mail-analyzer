@@ -155,14 +155,15 @@ can carry several), and a check fires when any one combination fires. Adding a m
 flag but never clear one, so a second From cannot hide the first. Domains come from
 `Mailbox.Address` and display names from `Mailbox.Name`, never from re-parsing a display string.
 
-**A domain as the display name**: the whole name, trimmed, must be an ASCII hostname with a suffix
-the Public Suffix List knows and a registrable domain below that suffix, so `Node.js`, `Taro.Yamada`
+**A domain as the display name**: the whole name is first normalized by the IDNA mapping (UTS #46),
+so full-width forms, ideographic dots and invisible characters cannot hide a domain. It must then be
+a hostname with a suffix the Public Suffix List knows and a registrable domain below that suffix, so `Node.js`, `Taro.Yamada`
 and `co.jp` are not domains. The registrable domains of the name and the address are compared, so
 `shop.example.jp` on `mail.example.jp` is one organization, while two tenants of `github.io` are two.
 A name that is also a valid domain on a word-like TLD (`Sales.Team`, `Acme.Inc`) is flagged: this
 residue is accepted, because on its own the signal gives an offline confidence of 0.25 and the LLM
-reads the whole message. A brand name alone (it would need a list of brands) and a domain among
-other words are not covered.
+reads the whole message. A brand name alone (it would need a list of brands), a domain among other
+words and a name IDNA rejects (one with a bidirectional control character) are not covered.
 
 **Subdomain matching**: `bounce.mag.subaru.jp` is considered related to
 `mag.subaru.jp`. Legitimate senders often use subdomains for bounce handling,

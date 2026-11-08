@@ -86,7 +86,22 @@ func TestAnalyzeSender(t *testing.T) {
 		{"domain name, other address", []string{"shop.example.jp|random@unrelated.example"}, nil, nil, false, true, false},
 		{"domain name, case and trailing dot", []string{" Shop.Example.JP. |random@unrelated.example"}, nil, nil, false, true, false},
 		{"second from cannot hide domain name", []string{"a@example.jp", "shop.example.jp|x@unrelated.example"}, nil, nil, false, true, false},
+		{"second from cannot hide domain name, flagged first", []string{"shop.example.jp|x@unrelated.example", "a@example.jp"}, nil, nil, false, true, false},
 		{"private suffix, other tenant", []string{"a.github.io|x@b.github.io"}, nil, nil, false, true, false},
+		// What renders as a domain is compared as that domain (IDNA mapping).
+		{"zero-width character", []string{"shop.example.jp\u200b|x@unrelated.example"}, nil, nil, false, true, false},
+		{"byte order mark", []string{"shop.example.jp\ufeff|x@unrelated.example"}, nil, nil, false, true, false},
+		{"full-width dots", []string{"shop．example．jp|x@unrelated.example"}, nil, nil, false, true, false},
+		{"ideographic dots", []string{"shop。example。jp|x@unrelated.example"}, nil, nil, false, true, false},
+		{"full-width letters", []string{"ｓｈｏｐ.example.jp|x@unrelated.example"}, nil, nil, false, true, false},
+		{"internationalized domain", []string{"例え.jp|x@unrelated.example"}, nil, nil, false, true, false},
+		{"A-label name, U-label address", []string{"xn--r8jz45g.jp|x@例え.jp"}, nil, nil, false, false, false},
+		{"U-label name, A-label address", []string{"例え.jp|x@xn--r8jz45g.jp"}, nil, nil, false, false, false},
+		{"trailing dot on the address", []string{"example.jp|x@example.jp."}, nil, nil, false, false, false},
+		// The length limits of RFC 1035.
+		{"63-byte label", []string{strings.Repeat("a", 63) + ".jp|x@unrelated.example"}, nil, nil, false, true, false},
+		{"64-byte label", []string{strings.Repeat("a", 64) + ".jp|x@unrelated.example"}, nil, nil, false, false, false},
+		{"over 253 bytes", []string{strings.Repeat(strings.Repeat("a", 50)+".", 5) + "example.jp|x@unrelated.example"}, nil, nil, false, false, false},
 		// The same organization, whichever side has the subdomain.
 		{"domain name, same domain", []string{"example.jp|info@example.jp"}, nil, nil, false, false, false},
 		{"domain name, address below", []string{"example.jp|info@mail.example.jp"}, nil, nil, false, false, false},
@@ -103,6 +118,7 @@ func TestAnalyzeSender(t *testing.T) {
 		{"single label", []string{"Shop|x@unrelated.example"}, nil, nil, false, false, false},
 		{"empty label", []string{"shop..example.jp|x@unrelated.example"}, nil, nil, false, false, false},
 		{"leading hyphen", []string{"-shop.example.jp|x@unrelated.example"}, nil, nil, false, false, false},
+		{"trailing hyphen", []string{"shop-.example.jp|x@unrelated.example"}, nil, nil, false, false, false},
 		{"space inside a label", []string{"Example Shop.jp|x@unrelated.example"}, nil, nil, false, false, false},
 		// Without an address there is nothing to compare the name to.
 		{"domain name, no address", []string{"shop.example.jp|"}, nil, nil, false, false, false},
