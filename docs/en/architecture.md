@@ -309,7 +309,7 @@ The composite judgment follows a strong/weak signal model:
 SPF/DMARC failure alone produced false positives on legitimate forwarded
 emails (SUBARU newsletter). Requiring at least one strong signal
 eliminates this class of false positives while preserving detection of
-genuine phishing (which invariably exhibits multiple strong signals).
+genuine phishing, which shows at least one strong signal.
 
 Confidence in offline mode is capped at 0.8 because rule-based analysis
 cannot assess content — a limitation that only LLM analysis can address.
