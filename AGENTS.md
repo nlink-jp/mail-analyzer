@@ -14,6 +14,7 @@ make build       # Build → dist/mail-analyzer
 make build-all   # Cross-compile all platforms
 make test        # Run tests
 make clean       # Remove dist/
+make vuln            # govulncheck over the build; `make package` runs it first and stops on a finding
 make verify-release  # gate: notarized, fresh, runs at this version, clean linux archives (run before upload)
 ```
 
