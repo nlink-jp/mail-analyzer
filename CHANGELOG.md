@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.1] - 2026-11-14
+
+### Security
+
+- **`golang.org/x/net` is updated from v0.52.0 to v0.62.0 and
+  `golang.org/x/text` from v0.36.0 to v0.43.0** (mailparse v0.3.1 requires the
+  same). Two things in the old versions were reached by this tool:
+  - The sender check passes the display name of the From field — text the
+    sender writes — to `x/net/idna`, which hands it to
+    `x/text/unicode/norm`. GO-2026-5026 (a Punycode label that decodes to
+    plain ASCII, such as `xn--example-`, is accepted as a domain) and
+    GO-2026-5970 (an endless loop on invalid UTF-8) are in those functions.
+    Whether a crafted display name could in fact stall an analysis was not
+    tested; the update removes the question.
+  - The connection to Vertex AI ran on x/net's own HTTP/2, not the standard
+    library's. Measured: a request through the same client against a local
+    server was handled by `golang.org/x/net/http2`. Three advisories apply to
+    an HTTP/2 client there (GO-2026-4918, -6610, -6611); each needs the
+    server end of the connection, which is Google's endpoint under TLS. With
+    v0.62.0 built by Go 1.27 the same request is handled by the standard
+    library, where they are fixed from Go 1.27.2.
+
+  `grpc` moves to v1.83.2 and `x/crypto` to v0.58.0 for advisories in code
+  this build does not call. One advisory remains, against a package this
+  build does not import (`x/crypto/openpgp`, unmaintained, no fixed
+  release). The Vertex AI SDK is unchanged (v1.70.0).
+
+### Changed
+
+- **Building from source needs Go 1.27.4 or later** (`go.mod`; it was 1.26.1),
+  so that no build uses a standard library with the HTTP/2 advisories above.
+- **`make package` runs the vulnerability check first** (`make vuln`), so a
+  release cannot be built past a finding.
+
 ## [0.8.0] - 2026-11-08
 
 ### Changed
